@@ -16,11 +16,11 @@ if __name__ == '__main__':
             if not board.can_placed(x, y):
                 continue
             
-            idx += 1
-            if board(x, y, idx % 2 + 1): 
+            if board(x, y, 1 - (idx % 2) * 2): 
                 break
+            idx += 1
         # board.show_board()
         winner = board.status
         scoreboard[winner] += 1
 
-print(scoreboard)
+    print(scoreboard)

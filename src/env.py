@@ -10,7 +10,7 @@ class Board(): # Empty: 0, X: 1, O: -1
         self.status = 0 # 0: draw, 1: X, -1: O
     
     def put(self, x, y, player):
-        assert player in [1, 2], "Player must be 1 or 2"
+        assert player in [-1, 1], "Player must be -1 or 1"
         self.board[x][y] = player
         
         self.check()
