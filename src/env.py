@@ -2,6 +2,9 @@ import numpy as np
 
 class Board(): # Empty: 0, X: 1, O: -1
     def __init__(self, size=3):
+        assert size >= 3, "Size must be at least 3"
+        assert type(size) is int, "Size must be an integer"
+        
         self.size = size
         self.reset()
     
@@ -34,6 +37,9 @@ class Board(): # Empty: 0, X: 1, O: -1
     
     def all_occupied(self): 
         return np.all(self.board != 0)
+    
+    def flatten(self): 
+        return self.board.flatten()
     
     def show_board(self): 
         print(f'=== Board : {self.status} ===')
