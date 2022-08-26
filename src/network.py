@@ -22,8 +22,8 @@ MIN_MEMORY_STACK = 5000
 gamma = 1
 n_episodes = 10000
 
-device = 'cpu'
-print(torch.__version__, device, torch.backends.mps.is_available())
+# FIXME: Using mps backend causes a slow down in training
+device = 'mps' if torch.backends.mps.is_available() else 'cpu'
 
 class ReplayBuffer(): 
     def __init__(self) -> None:
@@ -45,11 +45,11 @@ class ReplayBuffer():
             done_mask_list.append([done_mask])
         
         return (
-            torch.tensor(np.array(s_list), dtype=torch.float, device=device), 
+            torch.tensor(np.array(s_list), dtype=torch.float32, device=device), 
             torch.tensor(np.array(a_list), device=device), 
             torch.tensor(np.array(r_list), device=device), 
-            torch.tensor(np.array(s_prime_list), dtype=torch.float, device=device), 
-            torch.tensor(np.array(done_mask_list), device=device)
+            torch.tensor(np.array(s_prime_list), dtype=torch.float32, device=device), 
+            torch.tensor(np.array(done_mask_list), dtype=torch.float32, device=device)
         )
     
     def __len__(self):
@@ -75,7 +75,7 @@ class QNet(nn.Module):
 def sample_action(q: QNet, state: np.ndarray) -> int: 
     if random.random() < EPSILON:
         return random.randint(0, 8)
-    tensor = torch.FloatTensor(flat_state(state), device=device)
+    tensor = torch.FloatTensor(flat_state(state)).to(device)
     q_table = q(tensor)
     return torch.argmax(q_table).item()
 
@@ -113,8 +113,7 @@ def train_loop():
     loss = 0.0
     
     win, draw, lose = 0, 0, 0
-    epi = 0
-    for epi in tqdm(range(1, n_episodes + 1), desc=f'{epi}/{n_episodes} : {loss} : {win}/{draw}/{lose}'): 
+    for epi in tqdm(range(1, n_episodes + 1), desc=f'Loss : {loss} : {win}/{draw}/{lose}'): 
         state = env.reset(opponent=RandomAgent(), turn=bool(random.getrandbits(1)))
         done = False
 

@@ -34,10 +34,10 @@ class TicTacToe:
             return self._board.copy(), 0, True, {}
         
         # It's the opponent's turn
-        agent_action = self._opponent.action(-self._board)
-        if not self._possible(agent_action): 
+        opponent_action = self._opponent.action(-self._board)
+        if not self._possible(opponent_action): 
             return self._board.copy(), -1, True, {}
-        self._board[agent_action[0]][agent_action[1]] = -1
+        self._board[opponent_action[0]][opponent_action[1]] = -1
         if self._win():
             return self._board.copy(), -1, True, {}
         if self._all_occupied():

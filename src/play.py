@@ -5,10 +5,12 @@ from game import TicTacToe
 from agent import LearningAgent
 from utils import flat_state
 
-MODEL_CKPT = 'bin/model_ckpt10000.pt'
+device = 'mps' if torch.backends.mps.is_available() else 'cpu'
+
+MODEL_CKPT = 'bin/model_ckpt3000.pt'
 
 env = TicTacToe()
-state = env.reset(opponent=LearningAgent(state_dict=torch.load(MODEL_CKPT)), turn=False)
+state = env.reset(opponent=LearningAgent(state_dict=torch.load(MODEL_CKPT), device=device), turn=False)
 done = False
 
 while not done:

@@ -10,7 +10,6 @@ class BaseAgent():
     def action(self, state) -> int: 
         raise NotImplementedError('BaseAgent.action() is not implemented')
 
-# TODO: Implement the game environment
 class TicTacToe(): 
     def __init__(self, opponent: BaseAgent): 
         self.reset()

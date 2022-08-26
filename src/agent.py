@@ -32,9 +32,9 @@ class RandomAgent(BaseAgent):
         return random.choice(action_list)
 
 class LearningAgent(BaseAgent): 
-    def __init__(self, state_dict: OrderedDict) -> None:
+    def __init__(self, state_dict: OrderedDict, device='cpu') -> None:
         super().__init__()
-        self.q = QNet()
+        self.q = QNet().to(device)
         self.q.load_state_dict(state_dict)
     
     def action(self, state: np.ndarray) -> Tuple[int, int]: 
