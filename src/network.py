@@ -10,6 +10,7 @@ from collections import deque
 import random
 
 from utils import flat_state
+from config import device
 
 BUFFER_LIMIT = 50000
 BATCH_SIZE = 64
@@ -21,9 +22,6 @@ MIN_MEMORY_STACK = 5000
 
 gamma = 1
 n_episodes = 10000
-
-# FIXME: Using mps backend causes a slow down in training
-device = 'mps' if torch.backends.mps.is_available() else 'cpu'
 
 class ReplayBuffer(): 
     def __init__(self) -> None:

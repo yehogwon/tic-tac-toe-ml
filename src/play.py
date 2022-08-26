@@ -4,8 +4,7 @@ import numpy as np
 from game import TicTacToe
 from agent import LearningAgent
 from utils import flat_state
-
-device = 'mps' if torch.backends.mps.is_available() else 'cpu'
+from config import device
 
 MODEL_CKPT = 'bin/model_ckpt3000.pt'
 
