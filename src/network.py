@@ -1,3 +1,4 @@
+from typing import List, Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -27,27 +28,20 @@ class ReplayBuffer():
     def __init__(self) -> None:
         self._buffer = deque(maxlen=BUFFER_LIMIT)
     
-    def put(self, transition): 
+    def put(self, transition: Tuple[np.ndarray, int, int, np.ndarray, float]) -> None: 
         self._buffer.append(transition)
     
-    def sample(self, n): 
-        samples = random.sample(self._buffer, n)
-        s_list, a_list, r_list, s_prime_list, done_mask_list = [], [], [], [], []
-
-        for transition in samples: 
-            s, a, r, s_prime, done_mask = transition
-            s_list.append(s)
-            a_list.append([a])
-            r_list.append([r])
-            s_prime_list.append(s_prime)
-            done_mask_list.append([done_mask])
+    def sample(self, n: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]: 
+        # states, actions, rewards, next_states, done_masks
+        samples: List[Tuple[np.ndarray, int, int, np.ndarray, float]] = random.sample(self._buffer, n)
+        s_list, a_list, r_list, s_prime_list, done_mask_list = tuple(zip(*samples))
         
         return (
             torch.tensor(np.array(s_list), dtype=torch.float32, device=device), 
-            torch.tensor(np.array(a_list), device=device), 
-            torch.tensor(np.array(r_list), device=device), 
+            torch.tensor(np.array(a_list), device=device).unsqueeze(dim=1), 
+            torch.tensor(np.array(r_list), device=device).unsqueeze(dim=1), 
             torch.tensor(np.array(s_prime_list), dtype=torch.float32, device=device), 
-            torch.tensor(np.array(done_mask_list), dtype=torch.float32, device=device)
+            torch.tensor(np.array(done_mask_list), dtype=torch.float32, device=device).unsqueeze(dim=1)
         )
     
     def __len__(self):
@@ -79,14 +73,16 @@ def sample_action(q: QNet, state: np.ndarray) -> int:
 
 def train(q: QNet, q_target: QNet, memory: ReplayBuffer, optimizer: optim.Optimizer) -> float: 
     loss_avg = 0.0
+    criteria = F.smooth_l1_loss
     for _ in range(K): 
         # TODO: What about using cross entropy loss?
         s, a, r, s_prime, done_mask = memory.sample(BATCH_SIZE)
-        q_out = q(s)
-        q_a = q_out.gather(1, a)
+        q_out: torch.Tensor = q(s)
+        q_a = q_out.gather(dim=1, index=a)
         max_q_prime = q_target(s_prime).max(1)[0].unsqueeze(1)
-        target = r + gamma * max_q_prime * done_mask
-        loss = F.smooth_l1_loss(q_a, target)
+        target: torch.Tensor = r + gamma * max_q_prime * done_mask
+        print(target.shape, q_a.shape)
+        loss = criteria(q_a, target)
 
         optimizer.zero_grad()
         loss.backward()
