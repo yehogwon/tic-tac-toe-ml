@@ -14,7 +14,7 @@ from utils import flat_state
 from config import device
 
 BUFFER_LIMIT = 50000
-BATCH_SIZE = 64
+BATCH_SIZE = 32
 LEARNING_RATE = 0.0005
 K = 10
 EPSILON = 0.02
@@ -47,6 +47,7 @@ class ReplayBuffer():
     def __len__(self):
         return len(self._buffer)
 
+# Add softmax to the output layer
 class QNet(nn.Module): 
     def __init__(self) -> None:
         super().__init__()
@@ -72,7 +73,7 @@ def sample_action(q: QNet, state: np.ndarray) -> int:
     return torch.argmax(q_table).item()
 
 def train(q: QNet, q_target: QNet, memory: ReplayBuffer, optimizer: optim.Optimizer) -> float: 
-    loss_avg = 0.0
+    loss_sum = 0.0
     criteria = F.smooth_l1_loss
     for _ in range(K): 
         # TODO: What about using cross entropy loss?
@@ -81,15 +82,14 @@ def train(q: QNet, q_target: QNet, memory: ReplayBuffer, optimizer: optim.Optimi
         q_a = q_out.gather(dim=1, index=a)
         max_q_prime = q_target(s_prime).max(1)[0].unsqueeze(1)
         target: torch.Tensor = r + gamma * max_q_prime * done_mask
-        print(target.shape, q_a.shape)
         loss = criteria(q_a, target)
 
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
-        loss_avg = (loss_avg + loss.item()) / 2
-    return loss_avg
+        loss_sum += loss.item()
+    return loss_sum / K
 
 def train_loop(): 
     # Import here to avoid circular import

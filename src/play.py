@@ -6,7 +6,7 @@ from agent import LearningAgent
 from utils import flat_state
 from config import device
 
-MODEL_CKPT = 'bin/model_ckpt3000.pt'
+MODEL_CKPT = 'bin/model_ckpt10000.pt'
 
 env = TicTacToe()
 state = env.reset(opponent=LearningAgent(state_dict=torch.load(MODEL_CKPT), device=device), turn=False)

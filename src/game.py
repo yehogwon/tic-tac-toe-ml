@@ -19,6 +19,7 @@ class TicTacToe:
         @return: next state, reward, done, and info (for debugging purposes)
         @rtype: Tuple[np.ndarray, int, bool, dict]
         '''
+        # Consider `reward = -1` as not only being lose but also wrong position. 
         # First, place on the board for my turn
         # Assertive (the case where the action is out of range)
         if not (0 <= action[0] <= 2 and 0 <= action[1] <= 2): 
