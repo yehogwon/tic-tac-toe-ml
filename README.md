@@ -53,7 +53,7 @@ This script contains two classes and three functions. Let’s get dive into the 
     \text{action}=
     \begin{cases}
     \text{random action}, \space \text{if} \space prob < \epsilon \\
-    $\text{arg}\max$ \space \text{net}(\text{state}), \space \text{otherwise}
+    \text{arg}\max \space \text{net}(\text{state}), \space \text{otherwise}
     \end{cases}
     $$
     
