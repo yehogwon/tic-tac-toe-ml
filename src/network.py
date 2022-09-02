@@ -99,6 +99,13 @@ def train_loop():
     env = TicTacToe()
     q = QNet().to(device)
     q_target = QNet().to(device)
+
+    def init_weight(model: nn.Linear): 
+        if isinstance(model, nn.Linear): 
+            nn.init.xavier_uniform_(model.weight)
+            model.bias.data.fill_(0.01)
+
+    q.apply(init_weight)
     q_target.load_state_dict(q.state_dict())
     
     memory = ReplayBuffer()
