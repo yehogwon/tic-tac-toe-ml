@@ -47,13 +47,13 @@ This script contains two classes and three functions. Let’s get dive into the 
 
 **functions**
 
-- `sample_action(q: QNet, state: np.ndarray)`: It gets the current state and returns the proper (not always) action. Within the `EPSILON` portion, it returns a random action within $[0,9)$. In general, it returns the most-proficient action using `QNet`. It gives the flattened state to the `QNet` and gets value of each action. And returns the $\argmax$ of the value matrix. The mathematical form is as follows.
+- `sample_action(q: QNet, state: np.ndarray)`: It gets the current state and returns the proper (not always) action. Within the `EPSILON` portion, it returns a random action within $[0,9)$. In general, it returns the most-proficient action using `QNet`. It gives the flattened state to the `QNet` and gets value of each action. And returns the $\text{arg}\max$ of the value matrix. The mathematical form is as follows.
     
     $$
     \text{action}=
     \begin{cases}
     \text{random action}, \space \text{if} \space prob < \epsilon \\
-    \argmax \space \text{net}(\text{state}), \space \text{otherwise}
+    $\text{arg}\max$ \space \text{net}(\text{state}), \space \text{otherwise}
     \end{cases}
     $$
     
