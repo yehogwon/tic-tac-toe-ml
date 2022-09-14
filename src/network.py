@@ -1,140 +1,86 @@
-from typing import List, Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
-import numpy as np
-from tqdm.auto import tqdm
+from torchinfo import summary
+from torch.utils.tensorboard import SummaryWriter
 
-from collections import deque
-import random
-
-from utils import flat_state
-from config import device
-
-BUFFER_LIMIT = 50000
-BATCH_SIZE = 32
-LEARNING_RATE = 0.0005
-K = 10
-EPSILON = 0.02
-INTERVAL = 1000
-MIN_MEMORY_STACK = 5000
-
-gamma = 1
-n_episodes = 10000
-
-class ReplayBuffer(): 
-    def __init__(self) -> None:
-        self._buffer = deque(maxlen=BUFFER_LIMIT)
-    
-    def put(self, transition: Tuple[np.ndarray, int, int, np.ndarray, float]) -> None: 
-        self._buffer.append(transition)
-    
-    def sample(self, n: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]: 
-        # states, actions, rewards, next_states, done_masks
-        samples: List[Tuple[np.ndarray, int, int, np.ndarray, float]] = random.sample(self._buffer, n)
-        s_list, a_list, r_list, s_prime_list, done_mask_list = tuple(zip(*samples))
+class ResidualBlock(nn.Module): 
+    def __init__(self, input_dim, output_dim):
+        super().__init__()
         
-        return (
-            torch.tensor(np.array(s_list), dtype=torch.float32, device=device), 
-            torch.tensor(np.array(a_list), device=device).unsqueeze(dim=1), 
-            torch.tensor(np.array(r_list), device=device).unsqueeze(dim=1), 
-            torch.tensor(np.array(s_prime_list), dtype=torch.float32, device=device), 
-            torch.tensor(np.array(done_mask_list), dtype=torch.float32, device=device).unsqueeze(dim=1)
-        )
-    
-    def __len__(self):
-        return len(self._buffer)
+        self.input_dim = input_dim
+        self.output_dim = output_dim
 
-# Add softmax to the output layer
-class QNet(nn.Module): 
+        self.conv1 = nn.Conv2d(input_dim, output_dim, kernel_size=3, stride=1, padding=1)
+        self.bn1 = nn.BatchNorm2d(output_dim)
+        self.conv2 = nn.Conv2d(output_dim, output_dim, kernel_size=3, stride=1, padding=1)
+        self.bn2 = nn.BatchNorm2d(output_dim)
+        self.relu = nn.ReLU()
+        self.identity = nn.Identity()
+    
+    def forward(self, x: torch.Tensor): 
+        residual = self.identity(x)
+        
+        out = self.conv1(x)
+        out = self.relu(self.bn1(out))
+        
+        out = self.conv2(out)
+        out = self.bn2(out)
+
+        out += residual
+        out = self.relu(out)
+        
+        return out
+
+class PolicyValueNet(nn.Module): 
     def __init__(self) -> None:
         super().__init__()
-        self.fc1 = nn.Linear(18, 256)
-        self.fc2 = nn.Linear(256, 256)
-        self.fc3 = nn.Linear(256, 256)
-        self.fc4 = nn.Linear(256, 9)
 
-        self.relu = nn.ReLU()
-    
-    def forward(self, x): 
-        x = self.relu(self.fc1(x))
-        x = self.relu(self.fc2(x))
-        x = self.relu(self.fc3(x))
-        x = self.fc4(x)
-        return x
+        self.backbone = nn.Sequential(
+            nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(32), 
+            nn.ReLU(),
+            ResidualBlock(32, 32),
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+            ResidualBlock(32, 32),
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+            ResidualBlock(32, 32),
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+            ResidualBlock(32, 32),
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+            ResidualBlock(32, 32),
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+            ResidualBlock(32, 32),
+            nn.BatchNorm2d(32),
+            nn.ReLU()
+        )
 
-def sample_action(q: QNet, state: np.ndarray) -> int: 
-    if random.random() < EPSILON:
-        return random.randint(0, 8)
-    tensor = torch.FloatTensor(flat_state(state)).to(device)
-    q_table = q(tensor)
-    return torch.argmax(q_table).item()
-
-def train(q: QNet, q_target: QNet, memory: ReplayBuffer, optimizer: optim.Optimizer) -> float: 
-    loss_sum = 0.0
-    criteria = F.smooth_l1_loss
-    for _ in range(K): 
-        # TODO: What about using cross entropy loss?
-        s, a, r, s_prime, done_mask = memory.sample(BATCH_SIZE)
-        q_out: torch.Tensor = q(s)
-        q_a = q_out.gather(dim=1, index=a)
-        max_q_prime = q_target(s_prime).max(1)[0].unsqueeze(1)
-        target: torch.Tensor = r + gamma * max_q_prime * done_mask
-        loss = criteria(q_a, target)
-
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        loss_sum += loss.item()
-    return loss_sum / K
-
-def train_loop(): 
-    # Import here to avoid circular import
-    from game import TicTacToe
-    from agent import RandomAgent
-
-    env = TicTacToe()
-    q = QNet().to(device)
-    q_target = QNet().to(device)
-
-    def init_weight(model: nn.Linear): 
-        if isinstance(model, nn.Linear): 
-            nn.init.xavier_uniform_(model.weight)
-            model.bias.data.fill_(0.01)
-
-    q.apply(init_weight)
-    q_target.load_state_dict(q.state_dict())
-    
-    memory = ReplayBuffer()
-
-    optimizer = optim.Adam(q.parameters(), lr=LEARNING_RATE)
-    loss = 0.0
-    
-    win, draw, lose = 0, 0, 0
-    for epi in tqdm(range(1, n_episodes + 1), desc=f'Loss : {loss} : {win}/{draw}/{lose}'): 
-        state = env.reset(opponent=RandomAgent(), turn=bool(random.getrandbits(1)))
-        done = False
-
-        while not done: 
-            action = sample_action(q, state)
-            next_state, reward, done, _ = env.step((action // 3, action % 3))
-            done_mask = float(0 if done else 1)
-            memory.put((flat_state(state), action, reward, flat_state(next_state), done_mask))
-            state = next_state
+        self.policy_head = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(32 * 3 * 3, 9)
+        )
         
-        win += reward == 1
-        draw += reward == 0
-        lose += reward == -1
+        self.value_head = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(32 * 3 * 3, 1),
+        )
 
-        if len(memory) > MIN_MEMORY_STACK: 
-            loss = train(q, q_target, memory, optimizer)
-            if epi % INTERVAL == 0: 
-                q_target.load_state_dict(q.state_dict())
-                win, draw, lose = 0, 0, 0
-                torch.save(q.state_dict(), f'bin/model_ckpt{epi}.pt')
+    def forward(self, x: torch.Tensor) -> torch.Tensor: 
+        _feature = self.backbone(x)
+        policy = self.policy_head(_feature)
+        value = self.value_head(_feature)
+        return policy, value
 
-if __name__ == '__main__': 
-    train_loop()
+if __name__ == "__main__":
+    writer = SummaryWriter(log_dir='runs/')
+    model = PolicyValueNet()
+    summary(model, (1, 1, 3, 3), device="cpu")
+    writer.add_graph(model, torch.rand(1, 1, 3, 3))
+    writer.close()
