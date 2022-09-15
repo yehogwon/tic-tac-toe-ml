@@ -34,7 +34,6 @@ class SelfPlayBuffer:
         self._buffer = deque(maxlen=capacity)
         self.episode_len = 0
 
-    # TODO: Implement a data augmentation function
     def augment_data(self, data: List[Tuple[np.ndarray, np.ndarray, np.ndarray]]) -> List[Tuple[np.ndarray, np.ndarray, np.ndarray]]: 
         _data = data.copy()
         for state, prob, z in data: 
