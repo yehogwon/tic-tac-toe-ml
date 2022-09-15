@@ -70,3 +70,39 @@ def self_play(agent: BaseAgent) -> List[Tuple[np.ndarray, np.ndarray, np.ndarray
         z[np.array(current_players) != reward] = [-1.0]
     agent.reset_agent()
     return reward, list(zip(states, probs, z))
+
+class ManualAgent(BaseAgent): 
+    def __init__(self) -> None:
+        ...
+
+    def get_action(self, state: TicTacToeState) -> Tuple[int, np.ndarray]:
+        action = int(input('Action: '))
+        if action not in state.get_possible_actions(): 
+            raise ValueError('Invalid action')
+        probs = np.zeros(9, dtype=np.float32)
+        probs[action] = 1.0
+        return action, probs
+
+    def reset_agent(self) -> None:
+        ...
+
+class RandomAgent(BaseAgent):
+    def __init__(self) -> None:
+        ...
+
+    def get_action(self, state: TicTacToeState) -> Tuple[int, np.ndarray]:
+        action = random.choice(state.get_possible_actions())
+        probs = np.zeros(9, dtype=np.float32)
+        probs[action] = 1.0
+        return action, probs
+
+    def reset_agent(self) -> None:
+        ...
+
+def play(agents: List[BaseAgent]) -> None:
+    state = TicTacToeState(random.choice([1, -1]))
+    while not state.is_terminal():
+        action, _ = agents[(state.get_current_player() + 1) // 2].get_action(state)
+        state = state.take_action(action)
+        print(state)
+    print(f'Reward: {state.get_reward()}')
