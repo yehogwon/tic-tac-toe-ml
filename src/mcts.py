@@ -5,82 +5,19 @@ import copy
 import math
 import random
 import time
-from typing import Callable, List, Optional, Set, Tuple
+from typing import Callable, List, NamedTuple, Optional, Set, Tuple
 import numpy as np
 
 import torch
 import torch.nn.functional as F
 
 from network import PolicyValueNet
+from game import TicTacToeState
+from base import BaseAgent
 from tqdm import tqdm
 
 
 EPSILON = 1e-10
-
-class BaseState(ABC): 
-    def get_current_player(self) -> int:
-        raise NotImplementedError()
-
-    def get_possible_actions(self) -> List[int]: 
-        raise NotImplementedError()
-
-    def take_action(self, action: int) -> BaseState:
-        raise NotImplementedError()
-
-    def is_terminal(self) -> bool: 
-        raise NotImplementedError()
-
-    def get_possible_actions(self) -> List[int]: 
-        raise NotImplementedError()
-
-    def get_reward(self) -> int: 
-        raise NotImplementedError()
-
-class TicTacToeState(BaseState): 
-    def __init__(self, turn: int) -> None:
-        self.board = np.zeros((3, 3), dtype=np.int_)
-        self.turn = turn
-
-    def get_current_player(self): 
-        return self.turn
-    
-    def get_possible_actions(self) -> List[int]: 
-        coords = np.argwhere(self.board == 0)
-        coords = coords[:, 0] * 3 + coords[:, 1]
-        return [item for item in coords.tolist()]
-
-    def take_action(self, action: int) -> TicTacToeState:
-        self.board[action // 3][action % 3] = self.turn
-        self.turn -= 2 * self.turn
-        return self
-
-    def is_terminal(self) -> bool:
-        return np.abs(self.board).sum() == 9 or self.get_reward() != 0
-
-    def get_reward(self) -> int:
-        sum_list = []
-        for i in range(3): 
-            sum_list.append(self.board[i, :].sum())
-            sum_list.append(self.board[:, i].sum())
-        sum_list.append(self.board.diagonal().sum())
-        sum_list.append(np.fliplr(self.board).diagonal().sum())
-        sum_list = [abs(x) for x in sum_list]
-        if 3 in sum_list:
-            return -1 * self.turn
-        else: 
-            return 0
-    
-    def __repr__(self) -> str:
-        _board = self.board.tolist()
-        for item in range(3): 
-            for i in range(3): 
-                if _board[item][i] == 1: 
-                    _board[item][i] = 'X'
-                elif _board[item][i] == -1: 
-                    _board[item][i] = 'O'
-                else: 
-                    _board[item][i] = ' '
-        return '\n'.join([str(item) for item in _board])
 
 class Node: 
     def __init__(self, parent: Node, p_prob: float, c: float = math.sqrt(2)) -> None: 
@@ -121,7 +58,7 @@ class Node:
         return self.parent is None
 
 class MCTS: 
-    def __init__(self, policy_value_fn: Callable, c_puct=math.sqrt(2), n_iteration=100) -> None:
+    def __init__(self, policy_value_fn: Callable, c_puct=math.sqrt(2), n_iteration=10) -> None:
         self.root = Node(None, 1.0, c_puct)
         self.network = policy_value_fn
         self.c_puct = c_puct
@@ -153,7 +90,7 @@ class MCTS:
         node.update_recursive(-leaf_value)
     
     def get_move_probs(self, state: TicTacToeState) -> Tuple[List[int], np.typing.NDArray]: 
-        for _ in tqdm(range(self.n_iteration)): 
+        for _ in range(self.n_iteration): 
             _state = copy.deepcopy(state)
             self.playout(_state)
         act_visits = [(act, node.n) for act, node in self.root.children.items()]
@@ -172,11 +109,22 @@ class MCTS:
         else: 
             self.root = Node(None, 1.0, self.c_puct)
 
-def mcts_agent(mcts: MCTS, state: TicTacToeState) -> int: 
-    acts, probs = mcts.get_move_probs(state)
-    action = np.random.choice(acts, p=probs)
-    mcts.update_with_move(action)
-    return action
+class MCTSAgent(BaseAgent): 
+    def __init__(self, policy_value_fn: Callable[[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]], n_iteration: int) -> None:
+        self.network = policy_value_fn
+        self.mcts = MCTS(policy_value_fn, n_iteration=n_iteration)
+
+    def reset_agent(self):
+        self.mcts.update_with_move(-1)
+    
+    def get_action(self, state: TicTacToeState) -> Tuple[int, np.ndarray]: 
+        acts, probs = self.mcts.get_move_probs(state)
+        action = np.random.choice(acts, p=probs)
+        self.mcts.update_with_move(action)
+        return action, probs
+    
+    def __call__(self, state: TicTacToeState) -> int:
+        return self.get_action(state)[0]
 
 def random_agent(state: TicTacToeState) -> int: 
     return random.choice(state.get_possible_actions())
@@ -184,10 +132,7 @@ def random_agent(state: TicTacToeState) -> int:
 # FIXME: Do only legal actions
 if __name__ == '__main__': 
     state = TicTacToeState(-1)
-    network = PolicyValueNet()
-    mcts = MCTS(lambda x: network(x), n_iteration=200)
-
-    agents = [lambda x: mcts_agent(mcts, x), lambda x: random_agent(x)]
+    agents = [MCTSAgent(PolicyValueNet()), lambda x: random_agent(x)]
 
     print('\033[2J')
     print(state)
