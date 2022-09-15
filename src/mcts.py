@@ -3,15 +3,16 @@ from __future__ import annotations
 from abc import ABC
 import copy
 import math
+import random
+import time
 from typing import Callable, List, Optional, Set, Tuple
-import typing
 import numpy as np
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 
 from network import PolicyValueNet
+from tqdm import tqdm
 
 
 EPSILON = 1e-10
@@ -49,8 +50,7 @@ class TicTacToeState(BaseState):
         return [item for item in coords.tolist()]
 
     def take_action(self, action: int) -> TicTacToeState:
-        action = int(action)
-        self.board[action % 3, action // 3] = self.turn
+        self.board[action // 3][action % 3] = self.turn
         self.turn -= 2 * self.turn
         return self
 
@@ -64,15 +64,23 @@ class TicTacToeState(BaseState):
             sum_list.append(self.board[:, i].sum())
         sum_list.append(self.board.diagonal().sum())
         sum_list.append(np.fliplr(self.board).diagonal().sum())
-        if 3 * self.turn in sum_list:
-            return 1
-        elif -3 * self.turn in sum_list:
-            return -1
+        sum_list = [abs(x) for x in sum_list]
+        if 3 in sum_list:
+            return -1 * self.turn
         else: 
             return 0
     
     def __repr__(self) -> str:
-        return str(self.board)
+        _board = self.board.tolist()
+        for item in range(3): 
+            for i in range(3): 
+                if _board[item][i] == 1: 
+                    _board[item][i] = 'X'
+                elif _board[item][i] == -1: 
+                    _board[item][i] = 'O'
+                else: 
+                    _board[item][i] = ' '
+        return '\n'.join([str(item) for item in _board])
 
 class Node: 
     def __init__(self, parent: Node, p_prob: float, c: float = math.sqrt(2)) -> None: 
@@ -132,7 +140,12 @@ class MCTS:
             else: 
                 leaf_value = 0
         else: 
-            _action_probs = F.softmax(action_probs, dim=1).data.numpy()[0]
+            action_probs = action_probs.flatten()
+            illegal_actions: List[int] = [x for x in list(range(9)) if x not in state.get_possible_actions()]
+            for illegal_action in illegal_actions:
+                action_probs[illegal_action] = float('-inf')
+
+            _action_probs = F.softmax(action_probs, dim=0).data.numpy()
             action_prob_list = []
             for action, prob in enumerate(_action_probs): 
                 action_prob_list.append((action, prob))
@@ -140,12 +153,16 @@ class MCTS:
         node.update_recursive(-leaf_value)
     
     def get_move_probs(self, state: TicTacToeState) -> Tuple[List[int], np.typing.NDArray]: 
-        for _ in range(self.n_iteration): 
+        for _ in tqdm(range(self.n_iteration)): 
             _state = copy.deepcopy(state)
             self.playout(_state)
         act_visits = [(act, node.n) for act, node in self.root.children.items()]
         acts, visits = zip(*act_visits)
-        act_probs = self._softmax(np.log(np.array(visits)))
+        visits = list(visits)
+        illegal_actions = [x for x in list(range(9)) if x not in state.get_possible_actions()]
+        for illegal_action in illegal_actions:
+            visits[illegal_action] = float('-inf')
+        act_probs = F.softmax(torch.tensor(visits, dtype=torch.float32), dim=0).data.numpy()
         return acts, act_probs
 
     def update_with_move(self, last_move): 
@@ -155,30 +172,33 @@ class MCTS:
         else: 
             self.root = Node(None, 1.0, self.c_puct)
 
-    def _softmax(self, array: np.typing.NDArray) -> np.typing.NDArray: 
-        exp = np.exp(array - np.max(array))
-        return exp / np.sum(exp)
+def mcts_agent(mcts: MCTS, state: TicTacToeState) -> int: 
+    acts, probs = mcts.get_move_probs(state)
+    action = np.random.choice(acts, p=probs)
+    mcts.update_with_move(action)
+    return action
+
+def random_agent(state: TicTacToeState) -> int: 
+    return random.choice(state.get_possible_actions())
 
 # FIXME: Do only legal actions
 if __name__ == '__main__': 
     state = TicTacToeState(-1)
     network = PolicyValueNet()
-    mcts = MCTS(lambda x: network(x))
-    while not state.is_terminal():
-        acts, probs = mcts.get_move_probs(state)
-        action = np.random.choice(acts, p=probs)
-        state = state.take_action(action)
-        mcts.update_with_move(action)
+    mcts = MCTS(lambda x: network(x), n_iteration=200)
 
-        _board = state.board.tolist()
-        for item in range(3): 
-            for i in range(3): 
-                if _board[item][i] == 1: 
-                    _board[item][i] = 'X'
-                elif _board[item][i] == -1: 
-                    _board[item][i] = 'O'
-                else: 
-                    _board[item][i] = ' '
-        
+    agents = [lambda x: mcts_agent(mcts, x), lambda x: random_agent(x)]
+
+    print('\033[2J')
+    print(state)
+    while not state.is_terminal():
+        agent = agents[(state.turn + 1) // 2]
+        action = agent(state)
+        state.take_action(action)
+
         print('\033[2J')
-        print('\n'.join([str(item) for item in _board]))
+        print(state)
+        print(f'agent: {(state.turn + 1) // 2}, action: {action}')
+
+        time.sleep(0.5)
+    print(state.get_reward())

@@ -1,3 +1,4 @@
+from typing import Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -72,7 +73,7 @@ class PolicyValueNet(nn.Module):
             nn.Linear(32 * 3 * 3, 1),
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor: 
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]: 
         _feature = self.backbone(x)
         policy = self.policy_head(_feature)
         value = self.value_head(_feature)
