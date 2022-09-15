@@ -1,0 +1,15 @@
+FROM bitnami/pytorch
+
+RUN pip install --upgrade pip
+
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install -r /tmp/requirements.txt
+
+RUN mkdir -p /app
+WORKDIR /app
+
+COPY src/ src/
+
+VOLUME [ "/app/data" ]
+
+# CMD [ "python", "src/train.py" , "--mcts 100", ""]

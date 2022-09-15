@@ -16,6 +16,8 @@ from game import TicTacToeState
 from base import BaseAgent
 from tqdm import tqdm
 
+from config import device
+
 
 EPSILON = 1e-10
 
@@ -69,7 +71,7 @@ class MCTS:
         while not node.is_leaf(): 
             action, node = node.select()
             state.take_action(action)
-        action_probs, leaf_value = self.network(torch.tensor(state.board, dtype=torch.float32).view(1, 1, 3, 3))
+        action_probs, leaf_value = self.network(torch.tensor(state.board, dtype=torch.float32).view(1, 1, 3, 3).to(device))
         if state.is_terminal(): 
             winner = state.get_reward()
             if winner == state.turn: 
@@ -82,7 +84,7 @@ class MCTS:
             for illegal_action in illegal_actions:
                 action_probs[illegal_action] = float('-inf')
 
-            _action_probs = F.softmax(action_probs, dim=0).data.numpy()
+            _action_probs = F.softmax(action_probs, dim=0).cpu().data.numpy()
             action_prob_list = []
             for action, prob in enumerate(_action_probs): 
                 action_prob_list.append((action, prob))

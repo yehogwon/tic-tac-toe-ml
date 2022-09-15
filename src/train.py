@@ -11,12 +11,23 @@ import random
 import numpy as np
 import pickle
 import datetime
+import argparse
+
+# import multiprocessing
+# from multiprocessing import Pool
+import torch.multiprocessing as multiprocessing
+from torch.multiprocessing import Pool
 
 from base import BaseAgent
 from mcts import MCTSAgent
 from game import TicTacToeState, self_play
 from network import PolicyValueNet
+from config import device
 
+try: 
+    multiprocessing.set_start_method('spawn')
+except RuntimeError:
+    pass
 
 class SelfPlayBuffer: 
     def __init__(self, capacity: int) -> None: 
@@ -26,61 +37,60 @@ class SelfPlayBuffer:
     # TODO: Implement a data augmentation function
     def augment_data(self, data: List[Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]]): 
         return data
-    
-    def correct_data(self, agent: BaseAgent, n_game: int): 
-        for _ in tqdm(range(n_game), desc='Self-Play'): 
+
+    def _correct_data(self, idx: int, agent: BaseAgent, n_game: int): 
+        data_list = []
+        for _ in tqdm(range(n_game), desc='Self-Play', position=idx): 
             reward, play_data = self_play(agent)
             self.episode_len += len(play_data)
-            self._buffer.extend(play_data)
+            data_list.extend(play_data)
+        return data_list
+    
+    def correct_data(self, agent: BaseAgent, n_game: int): 
+        n_thread = multiprocessing.cpu_count() - 1
+        counts = [n_game // n_thread] * n_thread
+        if n_game % 4 != 0: 
+            n_thread += 1
+            counts.append(n_game % 4)
+        with Pool() as p:
+            data_list = p.starmap(self._correct_data, [list(item) for item in zip([i for i in range(n_thread)], [agent for _ in range(n_thread)], counts)])
+        for data in data_list:
+            self._buffer.extend(data)
+            self.episode_len += len(data)
     
     def sample(self, size: int) -> List: 
         return random.sample(self._buffer, size)
+    
+    def load(self, path: str) -> None: 
+        with open(path, 'rb') as f: 
+            self._buffer = pickle.load(f)
     
     def save(self, path: str) -> None: 
         with open(path, 'wb') as f: 
             pickle.dump(self._buffer, f)
 
 class TrainingPipeline: 
-    def __init__(self, capacity: int, n_epoch: int, batch_size: int, optimizer: optim.Optimizer, interval: int, device: str) -> None:
+    def __init__(self, capacity: int, n_epoch: int, batch_size: int, optimizer: optim.Optimizer, interval: int) -> None:
         self.capacity = capacity
         self.n_epoch = n_epoch
         self.batch_size = batch_size
         self.optimizer = optimizer
         self.interval = interval
-        self.device = device
 
-        def _criteria(y_hat: Tuple[torch.Tensor, torch.Tensor], target: Tuple[torch.Tensor, torch.Tensor]) -> float: 
-            print('shapes: ', y_hat[0].shape, target[0].shape, y_hat[1].shape, target[1].shape)
+        def _criteria(y_hat: Tuple[torch.Tensor, torch.Tensor], target: Tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor: 
             policy_loss = F.cross_entropy(y_hat[0], target[0])
             value_loss = F.mse_loss(y_hat[1], target[1])
             return policy_loss + value_loss
         self.criteria = _criteria
 
-    def train(
-        self, 
-        network: PolicyValueNet, 
-        mcts_iteration: int, 
-        n_game: int, 
-        data_path: str = None, 
-        data_only: bool = False) -> None: 
-
-        if data_path: 
-            with open(data_path, 'rb') as f: 
-                buffer._buffer = pickle.load(f)
-        else: 
-            buffer = SelfPlayBuffer(self.capacity)
-            buffer.correct_data(MCTSAgent(network, mcts_iteration), n_game)
-            buffer.save('data/' + datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S') + '.pkl')
-
-        if data_only: 
-            return
-
-        for i in tqdm(range(1, self.n_epoch + 1), desc='Training'): 
+    def train(self, network: PolicyValueNet, buffer: SelfPlayBuffer, model_path: str) -> None: 
+        loss_val = 0
+        for i in tqdm(range(1, self.n_epoch + 1), desc=f'Training : {loss_val}'): 
             batch = buffer.sample(self.batch_size)
 
-            state_batch = torch.tensor([data[0] for data in batch], dtype=torch.float32).unsqueeze(dim=1).to(self.device)
-            policy_batch = torch.tensor([data[1] for data in batch], dtype=torch.float32).to(self.device)
-            value_batch = torch.tensor([data[2] for data in batch], dtype=torch.float32).to(self.device)
+            state_batch = torch.tensor([data[0] for data in batch], dtype=torch.float32).unsqueeze(dim=1).to(device)
+            policy_batch = torch.tensor([data[1] for data in batch], dtype=torch.float32).to(device)
+            value_batch = torch.tensor([data[2] for data in batch], dtype=torch.float32).to(device)
 
             old_probs, old_v = network(state_batch)
             
@@ -90,11 +100,49 @@ class TrainingPipeline:
             loss.backward()
             self.optimizer.step()
 
+            loss_val = loss.item()
             if i % self.interval == 0: 
-                torch.save(network.state_dict(), f"model/model_{i}.pt")
+                torch.save(network.state_dict(), model_path + f"/model_{i}.pt")
 
 if __name__ == '__main__': 
-    network = PolicyValueNet()
-    optimizer = optim.Adam(network.parameters(), lr=1e-3, weight_decay=1e-4)
-    training = TrainingPipeline(10000, 1000, 32, optimizer, 1, 'cpu')
-    training.train(network, 1000, 10000, data_only=True)
+    print('device:', device)
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('mode', type=str, help='train or data', default='train')
+
+    parser.add_argument('--capacity', type=int, default=10000)
+    parser.add_argument('--epoch', type=int, default=10000)
+    parser.add_argument('--batch_size', type=int, default=64)
+    parser.add_argument('--lr', type=float, default=1e-3)
+    parser.add_argument('--mcts', type=int, default=100)
+    parser.add_argument('--game', type=int, default=100)
+    parser.add_argument('--interval', type=int, default=100)
+    parser.add_argument('--data', type=str)
+    parser.add_argument('--model', type=str)
+    parser.add_argument('--data_save', type=str)
+    parser.add_argument('--model_save', type=str)
+
+    args = parser.parse_args()
+
+    network = PolicyValueNet().to(device)
+    if args.model:
+        network.load_state_dict(torch.load(args.model))
+
+    if args.mode == 'train':
+        # example
+        # python src/train.py train --epoch 100 --batch_size 32 --lr 1e-3 --interval 10 --model_save model
+        if not args.data: 
+            raise ValueError('Please specify the data path')
+        buffer = SelfPlayBuffer(args.capacity)
+        buffer.load(args.data)
+        optimizer = optim.Adam(network.parameters(), lr=args.lr)
+        pipeline = TrainingPipeline(args.epoch, args.batch_size, optimizer, args.interval, device)
+        pipeline.train(network, buffer, args.model_save)
+    elif args.mode == 'data':
+        # example
+        # python src/train.py data --capacity 10000 --mcts 100 --game 10000 --data_save data
+        buffer = SelfPlayBuffer(args.capacity)
+        buffer.correct_data(MCTSAgent(network, args.mcts), args.game)
+        buffer.save(args.data_save + '/' + datetime.datetime.now().strftime('%Y%m%d_%H%M%S') + '.pkl')
+    else: 
+        raise ValueError('Invalid mode')

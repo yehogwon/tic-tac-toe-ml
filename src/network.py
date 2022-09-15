@@ -7,6 +7,8 @@ import torch.optim as optim
 from torchinfo import summary
 from torch.utils.tensorboard import SummaryWriter
 
+from config import device
+
 class ResidualBlock(nn.Module): 
     def __init__(self, input_dim, output_dim):
         super().__init__()
@@ -82,6 +84,6 @@ class PolicyValueNet(nn.Module):
 if __name__ == "__main__":
     writer = SummaryWriter(log_dir='runs/')
     model = PolicyValueNet()
-    summary(model, (1, 1, 3, 3), device="cpu")
+    summary(model, (1, 1, 3, 3), device=device)
     writer.add_graph(model, torch.rand(1, 1, 3, 3))
     writer.close()
