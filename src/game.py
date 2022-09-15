@@ -54,7 +54,7 @@ class TicTacToeState(BaseState):
                     _board[item][i] = ' '
         return '\n'.join([str(item) for item in _board])
 
-def self_play(agent: BaseAgent) -> Tuple[int, List[Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]]]: 
+def self_play(agent: BaseAgent) -> List[Tuple[np.ndarray, np.ndarray, np.ndarray]]: 
     state = TicTacToeState(random.choice([1, -1]))
     states, probs, current_players = [], [], []
     while not state.is_terminal():

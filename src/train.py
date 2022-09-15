@@ -35,10 +35,14 @@ class SelfPlayBuffer:
         self.episode_len = 0
 
     # TODO: Implement a data augmentation function
-    def augment_data(self, data: List[Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]]): 
-        return data
+    def augment_data(self, data: List[Tuple[np.ndarray, np.ndarray, np.ndarray]]) -> List[Tuple[np.ndarray, np.ndarray, np.ndarray]]: 
+        _data = data.copy()
+        for state, prob, z in data: 
+            _data.append((np.fliplr(state), prob, z))
+            _data.append((np.flipud(state), prob, z))
+        return _data
 
-    def _correct_data(self, idx: int, agent: BaseAgent, n_game: int): 
+    def _correct_data(self, idx: int, agent: BaseAgent, n_game: int) -> List[Tuple[np.ndarray, np.ndarray, np.ndarray]]: 
         data_list = []
         for _ in tqdm(range(n_game), desc=f'Self-Play {idx}', position=idx): 
             reward, play_data = self_play(agent)
@@ -51,11 +55,11 @@ class SelfPlayBuffer:
         counts = [n_game // n_thread] * n_thread
         if n_game % 4 != 0: 
             n_thread += 1
-            counts.append(n_game % 4)
+            counts.append(n_game % n_thread)
         with Pool() as p:
             data_list = p.starmap(self._correct_data, [list(item) for item in zip([i for i in range(n_thread)], [agent for _ in range(n_thread)], counts)])
         for data in data_list:
-            self._buffer.extend(data)
+            self._buffer.extend(self.augment_data(data))
             self.episode_len += len(data)
     
     def sample(self, size: int) -> List: 
