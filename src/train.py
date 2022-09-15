@@ -40,7 +40,7 @@ class SelfPlayBuffer:
 
     def _correct_data(self, idx: int, agent: BaseAgent, n_game: int): 
         data_list = []
-        for _ in tqdm(range(n_game), desc='Self-Play', position=idx): 
+        for _ in tqdm(range(n_game), desc=f'Self-Play {idx}', position=idx): 
             reward, play_data = self_play(agent)
             self.episode_len += len(play_data)
             data_list.extend(play_data)
