@@ -5,7 +5,6 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 from torchinfo import summary
-from torch.utils.tensorboard import SummaryWriter
 
 from config import device
 
@@ -82,8 +81,5 @@ class PolicyValueNet(nn.Module):
         return policy, value
 
 if __name__ == "__main__":
-    writer = SummaryWriter(log_dir='runs/')
     model = PolicyValueNet()
     summary(model, (1, 1, 3, 3), device=device)
-    writer.add_graph(model, torch.rand(1, 1, 3, 3))
-    writer.close()

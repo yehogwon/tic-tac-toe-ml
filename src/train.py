@@ -13,8 +13,6 @@ import pickle
 import datetime
 import argparse
 
-# import multiprocessing
-# from multiprocessing import Pool
 import torch.multiprocessing as multiprocessing
 from torch.multiprocessing import Pool
 
@@ -30,7 +28,7 @@ except RuntimeError:
     pass
 
 class SelfPlayBuffer: 
-    def __init__(self, capacity: int) -> None: 
+    def __init__(self, capacity: int=10000) -> None: 
         self._buffer = deque(maxlen=capacity)
         self.episode_len = 0
 
@@ -41,22 +39,23 @@ class SelfPlayBuffer:
             _data.append((np.flipud(state), prob, z))
         return _data
 
-    def _correct_data(self, idx: int, agent: BaseAgent, n_game: int) -> List[Tuple[np.ndarray, np.ndarray, np.ndarray]]: 
+    def _correct_data(self, idx: int, agent: BaseAgent, n_game: int, p_bar: bool) -> List[Tuple[np.ndarray, np.ndarray, np.ndarray]]: 
         data_list = []
-        for _ in tqdm(range(n_game), desc=f'Self-Play {idx}', position=idx): 
+        it = tqdm(range(n_game), desc=f'Self-Play {idx}', position=idx) if p_bar else range(n_game)
+        for _ in it: 
             reward, play_data = self_play(agent)
             self.episode_len += len(play_data)
             data_list.extend(play_data)
         return data_list
     
-    def correct_data(self, agent: BaseAgent, n_game: int): 
+    def correct_data(self, agent: BaseAgent, n_game: int, p_bar: bool): 
         n_thread = multiprocessing.cpu_count() - 1
         counts = [n_game // n_thread] * n_thread
         if n_game % 4 != 0: 
             n_thread += 1
             counts.append(n_game % n_thread)
         with Pool() as p:
-            data_list = p.starmap(self._correct_data, [list(item) for item in zip([i for i in range(n_thread)], [agent for _ in range(n_thread)], counts)])
+            data_list = p.starmap(self._correct_data, [list(item) for item in zip([i for i in range(n_thread)], [agent for _ in range(n_thread)], counts, [p_bar] * n_thread)])
         for data in data_list:
             self._buffer.extend(self.augment_data(data))
             self.episode_len += len(data)
@@ -91,6 +90,31 @@ class TrainingPipeline:
     def train(self, network: PolicyValueNet, buffer: SelfPlayBuffer, model_path: str) -> None: 
         pbar = tqdm(range(1, self.n_epoch + 1), desc=f'Training : 0')
         for i in pbar: 
+            batch = buffer.sample(self.batch_size)
+
+            state_batch = torch.tensor(np.array([data[0] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
+            policy_batch = torch.tensor(np.array([data[1] for data in batch]), dtype=torch.float32).to(device)
+            value_batch = torch.tensor(np.array([data[2] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
+
+            old_probs, old_v = network(state_batch)
+            
+            loss = self.criteria([old_probs, old_v], [policy_batch, value_batch])
+            
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
+
+            pbar.set_description(f'Training : {loss.item():.4f}')
+
+            if i % self.interval == 0: 
+                torch.save(network.state_dict(), model_path + f"/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pt")
+        
+    def self_train(self, network: PolicyValueNet, mcts: int, game: int, model_path: str) -> None: 
+        pbar = tqdm(range(1, self.n_epoch + 1), desc=f'Training : 0')
+        agent = MCTSAgent(network, mcts)
+        buffer = SelfPlayBuffer()
+        for i in pbar: 
+            buffer.correct_data(agent, game, False)
             batch = buffer.sample(self.batch_size)
 
             state_batch = torch.tensor(np.array([data[0] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
@@ -149,7 +173,11 @@ if __name__ == '__main__':
         # example
         # python src/train.py data --capacity 10000 --mcts 100 --game 10000 --data_save data
         buffer = SelfPlayBuffer(args.capacity)
-        buffer.correct_data(MCTSAgent(network, args.mcts), args.game)
+        buffer.correct_data(MCTSAgent(network, args.mcts), args.game, True)
         buffer.save(args.data_save + '/' + datetime.datetime.now().strftime('%Y%m%d_%H%M%S') + '.pkl')
+    elif args.mode == 'auto': 
+        optimizer = optim.Adam(network.parameters(), lr=args.lr)
+        pipeline = TrainingPipeline(args.epoch, args.batch_size, optimizer, args.interval)
+        pipeline.self_train(network, args.mcts, args.game, args.model_save)
     else: 
         raise ValueError('Invalid mode')
