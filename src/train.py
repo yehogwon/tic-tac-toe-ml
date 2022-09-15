@@ -64,6 +64,9 @@ class SelfPlayBuffer:
     
     def sample(self, size: int) -> List: 
         return random.sample(self._buffer, size)
+
+    def __len__(self) -> int:
+        return len(self._buffer)
     
     def load(self, path: str) -> None: 
         with open(path, 'rb') as f: 
@@ -74,8 +77,7 @@ class SelfPlayBuffer:
             pickle.dump(self._buffer, f)
 
 class TrainingPipeline: 
-    def __init__(self, capacity: int, n_epoch: int, batch_size: int, optimizer: optim.Optimizer, interval: int) -> None:
-        self.capacity = capacity
+    def __init__(self, n_epoch: int, batch_size: int, optimizer: optim.Optimizer, interval: int) -> None:
         self.n_epoch = n_epoch
         self.batch_size = batch_size
         self.optimizer = optimizer
@@ -88,13 +90,13 @@ class TrainingPipeline:
         self.criteria = _criteria
 
     def train(self, network: PolicyValueNet, buffer: SelfPlayBuffer, model_path: str) -> None: 
-        loss_val = 0
-        for i in tqdm(range(1, self.n_epoch + 1), desc=f'Training : {loss_val}'): 
+        pbar = tqdm(range(1, self.n_epoch + 1), desc=f'Training : 0')
+        for i in pbar: 
             batch = buffer.sample(self.batch_size)
 
-            state_batch = torch.tensor([data[0] for data in batch], dtype=torch.float32).unsqueeze(dim=1).to(device)
-            policy_batch = torch.tensor([data[1] for data in batch], dtype=torch.float32).to(device)
-            value_batch = torch.tensor([data[2] for data in batch], dtype=torch.float32).to(device)
+            state_batch = torch.tensor(np.array([data[0] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
+            policy_batch = torch.tensor(np.array([data[1] for data in batch]), dtype=torch.float32).to(device)
+            value_batch = torch.tensor(np.array([data[2] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
 
             old_probs, old_v = network(state_batch)
             
@@ -104,9 +106,10 @@ class TrainingPipeline:
             loss.backward()
             self.optimizer.step()
 
-            loss_val = loss.item()
+            pbar.set_description(f'Training : {loss.item():.4f}')
+
             if i % self.interval == 0: 
-                torch.save(network.state_dict(), model_path + f"/model_{i}.pt")
+                torch.save(network.state_dict(), model_path + f"/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pt")
 
 if __name__ == '__main__': 
     print('device:', device)
@@ -134,13 +137,14 @@ if __name__ == '__main__':
 
     if args.mode == 'train':
         # example
-        # python src/train.py train --epoch 100 --batch_size 32 --lr 1e-3 --interval 10 --model_save model
+        # python src/train.py train --epoch 100 --batch_size 32 --lr 1e-3 --interval 10 --data data/ --model_save model
         if not args.data: 
             raise ValueError('Please specify the data path')
         buffer = SelfPlayBuffer(args.capacity)
         buffer.load(args.data)
+        print('Dataset size:', len(buffer))
         optimizer = optim.Adam(network.parameters(), lr=args.lr)
-        pipeline = TrainingPipeline(args.epoch, args.batch_size, optimizer, args.interval, device)
+        pipeline = TrainingPipeline(args.epoch, args.batch_size, optimizer, args.interval)
         pipeline.train(network, buffer, args.model_save)
     elif args.mode == 'data':
         # example
