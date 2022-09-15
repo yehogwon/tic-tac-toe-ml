@@ -131,7 +131,6 @@ class MCTSAgent(BaseAgent):
 def random_agent(state: TicTacToeState) -> int: 
     return random.choice(state.get_possible_actions())
 
-# FIXME: Do only legal actions
 if __name__ == '__main__': 
     state = TicTacToeState(-1)
     agents = [MCTSAgent(PolicyValueNet()), lambda x: random_agent(x)]
