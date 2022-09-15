@@ -11,8 +11,9 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from network import PolicyValueNet
+import game
 from game import TicTacToeState
+from network import PolicyValueNet
 from base import BaseAgent
 from tqdm import tqdm
 
@@ -128,23 +129,7 @@ class MCTSAgent(BaseAgent):
     def __call__(self, state: TicTacToeState) -> int:
         return self.get_action(state)[0]
 
-def random_agent(state: TicTacToeState) -> int: 
-    return random.choice(state.get_possible_actions())
-
 if __name__ == '__main__': 
-    state = TicTacToeState(-1)
-    agents = [MCTSAgent(PolicyValueNet()), lambda x: random_agent(x)]
-
-    print('\033[2J')
-    print(state)
-    while not state.is_terminal():
-        agent = agents[(state.turn + 1) // 2]
-        action = agent(state)
-        state.take_action(action)
-
-        print('\033[2J')
-        print(state)
-        print(f'agent: {(state.turn + 1) // 2}, action: {action}')
-
-        time.sleep(0.5)
-    print(state.get_reward())
+    net = PolicyValueNet()
+    net.load_state_dict(torch.load('model/20220916_032131.pt'))
+    game.play([MCTSAgent(net, 100), game.ManualAgent()])

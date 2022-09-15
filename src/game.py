@@ -101,8 +101,10 @@ class RandomAgent(BaseAgent):
 
 def play(agents: List[BaseAgent]) -> None:
     state = TicTacToeState(random.choice([1, -1]))
+    print(state)
     while not state.is_terminal():
         action, _ = agents[(state.get_current_player() + 1) // 2].get_action(state)
         state = state.take_action(action)
+        print('----------------')
         print(state)
     print(f'Reward: {state.get_reward()}')
