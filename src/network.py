@@ -15,23 +15,19 @@ class ResidualBlock(nn.Module):
         self.input_dim = input_dim
         self.output_dim = output_dim
 
-        self.conv1 = nn.Conv2d(input_dim, output_dim, kernel_size=3, stride=1, padding=1)
-        self.bn1 = nn.BatchNorm2d(output_dim)
-        self.conv2 = nn.Conv2d(output_dim, output_dim, kernel_size=3, stride=1, padding=1)
-        self.bn2 = nn.BatchNorm2d(output_dim)
+        self.conv = nn.Conv2d(input_dim, output_dim, kernel_size=3, stride=1, padding=1)
+        self.bn = nn.BatchNorm2d(output_dim)
         self.relu = nn.ReLU()
         self.identity = nn.Identity()
     
     def forward(self, x: torch.Tensor): 
         residual = self.identity(x)
         
-        out = self.conv1(x)
-        out = self.relu(self.bn1(out))
-        
-        out = self.conv2(out)
-        out = self.bn2(out)
+        x = self.conv(x)
+        x = self.bn(x)
+        x = self.relu(x)
 
-        out += residual
+        out = x + residual
         out = self.relu(out)
         
         return out
@@ -44,6 +40,8 @@ class PolicyValueNet(nn.Module):
             nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(32), 
             nn.ReLU(),
+            ResidualBlock(32, 32),
+            ResidualBlock(32, 32),
             ResidualBlock(32, 32),
             ResidualBlock(32, 32),
             ResidualBlock(32, 32)
