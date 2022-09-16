@@ -30,6 +30,9 @@ except RuntimeError:
 def time_stamp(): 
     return datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
 
+def print_log(log: str): 
+    print(f'{time_stamp()} : {log}')
+
 class SelfPlayBuffer: 
     def __init__(self, capacity: int=10000) -> None: 
         self._buffer: List[Tuple[np.ndarray, np.ndarray, np.ndarray]] = deque(maxlen=capacity)
@@ -108,11 +111,11 @@ class TrainingPipeline:
             loss.backward()
             optimizer.step()
 
-            print(f'{i}/{self.n_epoch}: {loss.item():.4f}')
+            print_log(f'{i}/{self.n_epoch} : {loss.item():.4f}')
             if i % self.interval == 0: 
                 torch.save(network.state_dict(), model_path + f"/{time_stamp()}.pt")
-                print('Model Saved: ', model_path + f"/{time_stamp()}.pt")
-        print('Training Finished')
+                print_log(f'Model Saved : {model_path}/{time_stamp()}.pt')
+        print_log(f'Training Finished')
         
     def self_train(self, network: PolicyValueNet, mcts: int, game: int, n_game: int, model_path: str) -> None: 
         optimizer = optim.Adam(network.parameters(), lr=self.lr)
@@ -135,12 +138,12 @@ class TrainingPipeline:
                 loss.backward()
                 optimizer.step()
 
-                print(f'{time_stamp()} : {game_count}/{n_game} : {i}/{self.n_epoch} : {loss.item():.4f}')
+                print_log(f'{game_count}/{n_game} : {i}/{self.n_epoch} : {loss.item():.4f}')
                 if i % self.interval == 0: 
                     torch.save(network.state_dict(), model_path + f'/{time_stamp()}.pt')
-                    print(f'{time_stamp()} : Model Saved : {model_path}/{time_stamp()}.pt')
-            print(f'{time_stamp()} : Training Finished : {game_count}/{n_game}')
-        print(f'{time_stamp()} : Training Finished')
+                    print_log(f'Model Saved : {model_path}/{time_stamp()}.pt')
+            print_log(f'Training Finished : {game_count}/{n_game}')
+        print_log('Training Finished')
 
 if __name__ == '__main__': 
     print('device:', device)

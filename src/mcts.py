@@ -18,6 +18,7 @@ from base import BaseAgent
 from tqdm import tqdm
 
 from config import device
+import argparse
 
 
 EPSILON = 1e-10
@@ -130,6 +131,10 @@ class MCTSAgent(BaseAgent):
         return self.get_action(state)[0]
 
 if __name__ == '__main__': 
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model', type=str, help='name of the file containing the model weights')
+    args = parser.parse_args()
+
     net = PolicyValueNet()
-    net.load_state_dict(torch.load('model/20220915_195543.pt', map_location='cpu'))
+    net.load_state_dict(torch.load(f'model/{args.model}', map_location='cpu'))
     game.play([MCTSAgent(net, 100), game.ManualAgent()])
