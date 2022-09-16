@@ -27,9 +27,13 @@ try:
 except RuntimeError:
     pass
 
+def time_stamp(): 
+    return datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+
 class SelfPlayBuffer: 
     def __init__(self, capacity: int=10000) -> None: 
-        self._buffer = deque(maxlen=capacity)
+        self._buffer: List[Tuple[np.ndarray, np.ndarray, np.ndarray]] = deque(maxlen=capacity)
+        
         self.episode_len = 0
 
     def augment_data(self, data: List[Tuple[np.ndarray, np.ndarray, np.ndarray]]) -> List[Tuple[np.ndarray, np.ndarray, np.ndarray]]: 
@@ -75,10 +79,10 @@ class SelfPlayBuffer:
             pickle.dump(self._buffer, f)
 
 class TrainingPipeline: 
-    def __init__(self, n_epoch: int, batch_size: int, optimizer: optim.Optimizer, interval: int) -> None:
+    def __init__(self, n_epoch: int, batch_size: int, lr: float, interval: int) -> None:
         self.n_epoch = n_epoch
         self.batch_size = batch_size
-        self.optimizer = optimizer
+        self.lr = lr
         self.interval = interval
 
         def _criteria(y_hat: Tuple[torch.Tensor, torch.Tensor], target: Tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor: 
@@ -88,8 +92,8 @@ class TrainingPipeline:
         self.criteria = _criteria
 
     def train(self, network: PolicyValueNet, buffer: SelfPlayBuffer, model_path: str) -> None: 
-        pbar = tqdm(range(1, self.n_epoch + 1), desc=f'Training : 0')
-        for i in pbar: 
+        optimizer = optim.Adam(network.parameters(), lr=self.lr)
+        for i in range(1, self.n_epoch + 1): 
             batch = buffer.sample(self.batch_size)
 
             state_batch = torch.tensor(np.array([data[0] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
@@ -100,39 +104,43 @@ class TrainingPipeline:
             
             loss = self.criteria([old_probs, old_v], [policy_batch, value_batch])
             
-            self.optimizer.zero_grad()
+            optimizer.zero_grad()
             loss.backward()
-            self.optimizer.step()
+            optimizer.step()
 
-            pbar.set_description(f'Training : {loss.item():.4f}')
-
+            print(f'{i}/{self.n_epoch}: {loss.item():.4f}')
             if i % self.interval == 0: 
-                torch.save(network.state_dict(), model_path + f"/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pt")
+                torch.save(network.state_dict(), model_path + f"/{time_stamp()}.pt")
+                print('Model Saved: ', model_path + f"/{time_stamp()}.pt")
+        print('Training Finished')
         
-    def self_train(self, network: PolicyValueNet, mcts: int, game: int, model_path: str) -> None: 
-        pbar = tqdm(range(1, self.n_epoch + 1), desc=f'Training : 0')
-        agent = MCTSAgent(network, mcts)
-        buffer = SelfPlayBuffer()
-        for i in pbar: 
-            buffer.correct_data(agent, game, False)
-            batch = buffer.sample(self.batch_size)
+    def self_train(self, network: PolicyValueNet, mcts: int, game: int, n_game: int, model_path: str) -> None: 
+        optimizer = optim.Adam(network.parameters(), lr=self.lr)
+        for game_count in range(1, n_game + 1): 
+            agent = MCTSAgent(network, mcts)
+            buffer = SelfPlayBuffer()
+            for i in range(1, self.n_epoch + 1): 
+                buffer.correct_data(agent, game, False)
+                batch = buffer.sample(self.batch_size)
 
-            state_batch = torch.tensor(np.array([data[0] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
-            policy_batch = torch.tensor(np.array([data[1] for data in batch]), dtype=torch.float32).to(device)
-            value_batch = torch.tensor(np.array([data[2] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
+                state_batch = torch.tensor(np.array([data[0] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
+                policy_batch = torch.tensor(np.array([data[1] for data in batch]), dtype=torch.float32).to(device)
+                value_batch = torch.tensor(np.array([data[2] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
 
-            old_probs, old_v = network(state_batch)
-            
-            loss = self.criteria([old_probs, old_v], [policy_batch, value_batch])
-            
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
+                old_probs, old_v = network(state_batch)
+                
+                loss = self.criteria([old_probs, old_v], [policy_batch, value_batch])
+                
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
 
-            pbar.set_description(f'Training : {loss.item():.4f}')
-
-            if i % self.interval == 0: 
-                torch.save(network.state_dict(), model_path + f"/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pt")
+                print(f'{time_stamp()} : {game_count}/{n_game} : {i}/{self.n_epoch} : {loss.item():.4f}')
+                if i % self.interval == 0: 
+                    torch.save(network.state_dict(), model_path + f'/{time_stamp()}.pt')
+                    print(f'{time_stamp()} : Model Saved: {model_path}/{time_stamp()}.pt')
+            print(f'{time_stamp()} : Training Finished: {game_count}/{n_game}')
+        print(f'{time_stamp()} : Training Finished')
 
 if __name__ == '__main__': 
     print('device:', device)
@@ -142,6 +150,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--capacity', type=int, default=10000)
     parser.add_argument('--epoch', type=int, default=10000)
+    parser.add_argument('--game_count', type=int, default=10000)
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--mcts', type=int, default=100)
@@ -176,8 +185,9 @@ if __name__ == '__main__':
         buffer.correct_data(MCTSAgent(network, args.mcts), args.game, True)
         buffer.save(args.data_save + '/' + datetime.datetime.now().strftime('%Y%m%d_%H%M%S') + '.pkl')
     elif args.mode == 'auto': 
-        optimizer = optim.Adam(network.parameters(), lr=args.lr)
-        pipeline = TrainingPipeline(args.epoch, args.batch_size, optimizer, args.interval)
-        pipeline.self_train(network, args.mcts, args.game, args.model_save)
+        # example
+        # python src/train.py auto --epoch 100 --batch_size 32 --mcts 50 --game 20 --game_count 10 --lr 1e-3 --interval 50 --model_save model
+        pipeline = TrainingPipeline(args.epoch, args.batch_size, args.lr, args.interval)
+        pipeline.self_train(network, args.mcts, args.game, args.game_count, args.model_save)
     else: 
         raise ValueError('Invalid mode')

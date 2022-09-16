@@ -131,5 +131,5 @@ class MCTSAgent(BaseAgent):
 
 if __name__ == '__main__': 
     net = PolicyValueNet()
-    net.load_state_dict(torch.load('model/20220916_032131.pt'))
+    net.load_state_dict(torch.load('model/20220915_195543.pt', map_location='cpu'))
     game.play([MCTSAgent(net, 100), game.ManualAgent()])
