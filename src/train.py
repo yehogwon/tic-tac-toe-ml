@@ -138,8 +138,8 @@ class TrainingPipeline:
                 print(f'{time_stamp()} : {game_count}/{n_game} : {i}/{self.n_epoch} : {loss.item():.4f}')
                 if i % self.interval == 0: 
                     torch.save(network.state_dict(), model_path + f'/{time_stamp()}.pt')
-                    print(f'{time_stamp()} : Model Saved: {model_path}/{time_stamp()}.pt')
-            print(f'{time_stamp()} : Training Finished: {game_count}/{n_game}')
+                    print(f'{time_stamp()} : Model Saved : {model_path}/{time_stamp()}.pt')
+            print(f'{time_stamp()} : Training Finished : {game_count}/{n_game}')
         print(f'{time_stamp()} : Training Finished')
 
 if __name__ == '__main__': 
