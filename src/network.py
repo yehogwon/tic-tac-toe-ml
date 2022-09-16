@@ -45,23 +45,8 @@ class PolicyValueNet(nn.Module):
             nn.BatchNorm2d(32), 
             nn.ReLU(),
             ResidualBlock(32, 32),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
             ResidualBlock(32, 32),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            ResidualBlock(32, 32),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            ResidualBlock(32, 32),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            ResidualBlock(32, 32),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            ResidualBlock(32, 32),
-            nn.BatchNorm2d(32),
-            nn.ReLU()
+            ResidualBlock(32, 32)
         )
 
         self.policy_head = nn.Sequential(
