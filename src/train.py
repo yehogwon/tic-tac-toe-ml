@@ -163,7 +163,7 @@ if __name__ == '__main__':
     parser.add_argument('--game', type=int, default=100)
     parser.add_argument('--interval', type=int, default=100)
     parser.add_argument('--data', type=str)
-    parser.add_argument('--model', type=str)
+    parser.add_argument('--pretrained', type=str)
     parser.add_argument('--data_save', type=str)
     parser.add_argument('--model_save', type=str)
 
