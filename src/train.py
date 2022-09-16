@@ -95,7 +95,7 @@ class TrainingPipeline:
         self.criteria = _criteria
 
     def train(self, network: PolicyValueNet, buffer: SelfPlayBuffer, model_path: str) -> None: 
-        optimizer = optim.Adam(network.parameters(), lr=self.lr)
+        optimizer = optim.Adam(network.parameters(), lr=self.lr, weight_decay=1e-4)
         for i in range(1, self.n_epoch + 1): 
             batch = buffer.sample(self.batch_size)
 
@@ -103,7 +103,8 @@ class TrainingPipeline:
             policy_batch = torch.tensor(np.array([data[1] for data in batch]), dtype=torch.float32).to(device)
             value_batch = torch.tensor(np.array([data[2] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
 
-            old_probs, old_v = network(state_batch)
+            _old_probs, old_v = network(state_batch)
+            old_probs = F.softmax(_old_probs, dim=1)
             
             loss = self.criteria([old_probs, old_v], [policy_batch, value_batch])
             
@@ -118,19 +119,21 @@ class TrainingPipeline:
         print_log(f'Training Finished')
         
     def self_train(self, network: PolicyValueNet, mcts: int, game: int, n_game: int, model_path: str) -> None: 
-        optimizer = optim.Adam(network.parameters(), lr=self.lr)
+        optimizer = optim.Adam(network.parameters(), lr=self.lr, weight_decay=1e-4)
         for game_count in range(1, n_game + 1): 
             agent = MCTSAgent(network, mcts)
             buffer = SelfPlayBuffer()
             for i in range(1, self.n_epoch + 1): 
-                buffer.correct_data(agent, game, False)
-                batch = buffer.sample(self.batch_size)
+                with torch.no_grad(): 
+                    buffer.correct_data(agent, game, False)
+                    batch = buffer.sample(self.batch_size)
 
                 state_batch = torch.tensor(np.array([data[0] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
                 policy_batch = torch.tensor(np.array([data[1] for data in batch]), dtype=torch.float32).to(device)
                 value_batch = torch.tensor(np.array([data[2] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
 
-                old_probs, old_v = network(state_batch)
+                _old_probs, old_v = network(state_batch)
+                old_probs = F.softmax(_old_probs, dim=1)
                 
                 loss = self.criteria([old_probs, old_v], [policy_batch, value_batch])
                 
@@ -185,8 +188,9 @@ if __name__ == '__main__':
         # example
         # python src/train.py data --capacity 10000 --mcts 100 --game 10000 --data_save data
         buffer = SelfPlayBuffer(args.capacity)
-        buffer.correct_data(MCTSAgent(network, args.mcts), args.game, True)
-        buffer.save(args.data_save + '/' + datetime.datetime.now().strftime('%Y%m%d_%H%M%S') + '.pkl')
+        with torch.no_grad(): 
+            buffer.correct_data(MCTSAgent(network, args.mcts), args.game, True)
+            buffer.save(args.data_save + '/' + datetime.datetime.now().strftime('%Y%m%d_%H%M%S') + '.pkl')
     elif args.mode == 'auto': 
         # example
         # python src/train.py auto --epoch 100 --batch_size 32 --mcts 50 --game 20 --game_count 10 --lr 1e-3 --interval 50 --model_save model

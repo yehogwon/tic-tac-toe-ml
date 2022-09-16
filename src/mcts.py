@@ -44,15 +44,18 @@ class Node:
     
     def update(self, reward: int): 
         self.n += 1
-        self.w += reward
+        self.w += max(0, reward)
     
-    def update_recursive(self, reward: int): 
+    def backpropagate(self, reward: int): 
         if self.parent: 
-            self.parent.update_recursive(-reward)
+            self.parent.backpropagate(-reward)
         self.update(reward)
 
     def get_uct(self): 
-        self.u = self.w / (self.n + EPSILON) + self.c * self.p_prob * math.sqrt(self.parent.n) / (1 + self.n)
+        if self.n == 0: 
+            self.u = float('inf')
+        else:
+            self.u = self.w / (self.n) + self.c * self.p_prob * math.sqrt(self.parent.n) / (1 + self.n)
         return self.u
     
     def is_leaf(self): 
@@ -91,7 +94,7 @@ class MCTS:
             for action, prob in enumerate(_action_probs): 
                 action_prob_list.append((action, prob))
             node.expand(action_prob_list)
-        node.update_recursive(-leaf_value)
+        node.backpropagate(-leaf_value)
     
     def get_move_probs(self, state: TicTacToeState) -> Tuple[List[int], np.typing.NDArray]: 
         for _ in range(self.n_iteration): 
