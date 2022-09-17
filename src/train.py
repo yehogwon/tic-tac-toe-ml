@@ -37,6 +37,7 @@ def print_log(log: str):
 class SelfPlayBuffer: 
     def __init__(self, capacity: int=10000) -> None: 
         self._buffer: List[Tuple[np.ndarray, np.ndarray, np.ndarray]] = deque(maxlen=capacity)
+        self.capacity = capacity
         
         self.episode_len = 0
 
@@ -129,9 +130,12 @@ class TrainingPipeline:
         optimizer = optim.Adam(network.parameters(), lr=self.lr)
         agent = MCTSAgent(network, mcts)
         buffer = SelfPlayBuffer()
-        for i in range(1, self.n_epoch + 1): 
+        i = 1
+        while i <= self.n_epoch:
             with torch.no_grad(): 
                 buffer.correct_data(agent, game, False)
+            if len(buffer) < buffer.capacity: 
+                continue
             loss_avg = float(0)
             p_bar = tqdm(buffer.loader(self.batch_size), total=len(buffer) // self.batch_size, desc=f'Training {i}/{self.n_epoch} : 0', file=sys.stdout)
             for batch in p_bar:
@@ -153,6 +157,7 @@ class TrainingPipeline:
             if i % self.interval == 0: 
                 torch.save(network.state_dict(), model_path + f'/{time_stamp()}.pt')
                 print_log(f'Model Saved : {model_path}/{time_stamp()}.pt')
+            i += 1
         print_log('Training Finished')
 
 if __name__ == '__main__': 
