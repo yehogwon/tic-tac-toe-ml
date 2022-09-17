@@ -100,7 +100,7 @@ class TrainingPipeline:
         self.criteria = _criteria
 
     def train(self, network: PolicyValueNet, buffer: SelfPlayBuffer, model_path: str) -> None: 
-        optimizer = optim.Adam(network.parameters(), lr=self.lr, weight_decay=1e-2)
+        optimizer = optim.Adam(network.parameters(), lr=self.lr)
         for i in range(1, self.n_epoch + 1): 
             loss_avg = float(0)
             p_bar = tqdm(buffer.loader(self.batch_size), total=len(buffer) // self.batch_size, desc=f'Training {i}/{self.n_epoch} : 0', file=sys.stdout)
@@ -126,7 +126,7 @@ class TrainingPipeline:
         print_log(f'Training Finished')
         
     def self_train(self, network: PolicyValueNet, mcts: int, game: int, model_path: str) -> None: 
-        optimizer = optim.Adam(network.parameters(), lr=self.lr, weight_decay=1e-2)
+        optimizer = optim.Adam(network.parameters(), lr=self.lr)
         agent = MCTSAgent(network, mcts)
         buffer = SelfPlayBuffer()
         for i in range(1, self.n_epoch + 1): 
