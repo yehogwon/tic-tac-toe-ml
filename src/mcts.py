@@ -120,15 +120,16 @@ class MCTS:
             self.root = Node(None, 1.0, self.c_puct)
 
 class MCTSAgent(BaseAgent): 
-    def __init__(self, policy_value_fn: Callable[[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]], n_iteration: int) -> None:
+    def __init__(self, policy_value_fn: Callable[[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]], n_iteration: int, explore: bool = True) -> None:
         self.network = policy_value_fn
         self.mcts = MCTS(policy_value_fn, n_iteration=n_iteration)
+        self.explore = explore
 
     def reset_agent(self):
         self.mcts.update_with_move(-1)
     
     def get_action(self, state: TicTacToeState) -> Tuple[int, np.ndarray]: 
-        acts, probs = self.mcts.get_move_probs(state, explore=False)
+        acts, probs = self.mcts.get_move_probs(state, explore=self.explore)
         action = np.random.choice(acts, p=probs)
         self.mcts.update_with_move(action)
         return action, probs
@@ -144,4 +145,4 @@ if __name__ == '__main__':
 
     net = PolicyValueNet()
     net.load_state_dict(torch.load(f'model/{args.model}', map_location='cpu'))
-    game.play([MCTSAgent(net, args.mcts), game.ManualAgent()])
+    game.play([MCTSAgent(net, args.mcts, False), game.ManualAgent()])
