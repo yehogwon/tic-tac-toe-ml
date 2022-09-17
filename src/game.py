@@ -67,7 +67,7 @@ def self_play(agent: BaseAgent) -> List[Tuple[np.ndarray, np.ndarray, np.ndarray
     z = np.zeros(len(current_players), dtype=np.float32)
     if reward != 0: 
         z[np.array(current_players) == reward] = [1.0]
-        z[np.array(current_players) != reward] = [-1.0]
+        z[np.array(current_players) != reward] = [0.0]
     agent.reset_agent()
     return reward, list(zip(states, probs, z))
 

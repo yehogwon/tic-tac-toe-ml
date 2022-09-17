@@ -101,6 +101,7 @@ class TrainingPipeline:
         self.criteria = _criteria
 
     def train(self, network: PolicyValueNet, buffer: SelfPlayBuffer, model_path: str) -> None: 
+        network.train()
         optimizer = optim.Adam(network.parameters(), lr=self.lr)
         for i in range(1, self.n_epoch + 1): 
             loss_avg = float(0)
@@ -112,6 +113,7 @@ class TrainingPipeline:
 
                 _old_probs, old_v = network(state_batch)
                 old_probs = F.softmax(_old_probs, dim=1)
+                old_v = F.softmax(old_v, dim=1)
                 
                 loss = self.criteria([old_probs, old_v], [policy_batch, value_batch])
                 
@@ -119,7 +121,10 @@ class TrainingPipeline:
                 loss.backward()
                 optimizer.step()
 
-                loss_avg = (loss_avg + loss.item()) / 2
+                if loss_avg == 0: 
+                    loss_avg = loss.item()
+                else: 
+                    loss_avg = (loss_avg + loss.item()) / 2
                 p_bar.set_description(f'Training {i}/{self.n_epoch} : {loss_avg:.4f}')
             if i % self.interval == 0: 
                 torch.save(network.state_dict(), model_path + f"/{time_stamp()}.pt")
@@ -127,6 +132,7 @@ class TrainingPipeline:
         print_log(f'Training Finished')
         
     def self_train(self, network: PolicyValueNet, mcts: int, game: int, model_path: str) -> None: 
+        network.train()
         optimizer = optim.Adam(network.parameters(), lr=self.lr)
         agent = MCTSAgent(network, mcts)
         buffer = SelfPlayBuffer()
@@ -145,6 +151,7 @@ class TrainingPipeline:
 
                 _old_probs, old_v = network(state_batch)
                 old_probs = F.softmax(_old_probs, dim=1)
+                old_v = F.softmax(old_v, dim=1)
                 
                 loss = self.criteria([old_probs, old_v], [policy_batch, value_batch])
                 
@@ -152,13 +159,56 @@ class TrainingPipeline:
                 loss.backward()
                 optimizer.step()
 
-                loss_avg = (loss_avg + loss.item()) / 2
+                if loss_avg == 0: 
+                    loss_avg = loss.item()
+                else: 
+                    loss_avg = (loss_avg + loss.item()) / 2
                 p_bar.set_description(f'Training {i}/{self.n_epoch} : {loss_avg:.4f}')
             if i % self.interval == 0: 
                 torch.save(network.state_dict(), model_path + f'/{time_stamp()}.pt')
                 print_log(f'Model Saved : {model_path}/{time_stamp()}.pt')
             i += 1
         print_log('Training Finished')
+
+class EvaluationPipeline: 
+    def __init__(self, n_epoch: int, batch_size: int) -> None:
+        self.n_epoch = n_epoch
+        self.batch_size = batch_size
+    
+    def self_evaluate(self, network: PolicyValueNet, mcts: int, game: int): 
+        network.eval()
+        agent = MCTSAgent(network, mcts)
+        buffer = SelfPlayBuffer()
+        i = 1
+        correct, diff_avg = 0, 0
+        total = 0
+        while i <= self.n_epoch:
+            with torch.no_grad(): 
+                buffer.correct_data(agent, game, False)
+            if len(buffer) < buffer.capacity: 
+                continue
+            p_bar = tqdm(buffer.loader(self.batch_size), total=len(buffer) // self.batch_size, desc=f'Training {i}/{self.n_epoch} : 0', file=sys.stdout)
+            for batch in p_bar:
+                state_batch = torch.tensor(np.array([data[0] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
+                policy_batch = torch.tensor(np.array([data[1] for data in batch]), dtype=torch.float32).to(device)
+                value_batch = torch.tensor(np.array([data[2] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
+
+                _probs, v = network(state_batch)
+                probs = F.softmax(_probs, dim=1)
+                old_v = F.softmax(old_v, dim=1)
+
+                correct += torch.sum(torch.argmax(probs, dim=1) == torch.argmax(policy_batch, dim=1)).item()
+                total += len(policy_batch)
+
+                if diff_avg == 0: 
+                    diff_avg = torch.sum(torch.abs(v - value_batch)).item()
+                else:
+                    diff_avg = (diff_avg + torch.sum(torch.abs(v - value_batch)).item()) / 2
+
+                p_bar.set_description(f'Evaluation {i}/{self.n_epoch} : {correct / total:.4f} : {diff_avg:.4f}')
+            i += 1
+        print_log(f'Evaluation Finished : {(correct / total) * 100:.2f}% : {(1 - diff_avg) * 100:.2f}%')
+        
 
 if __name__ == '__main__': 
     print('device:', device)
@@ -182,7 +232,7 @@ if __name__ == '__main__':
 
     network = PolicyValueNet().to(device)
     if args.pretrained:
-        network.load_state_dict(torch.load(args.model))
+        network.load_state_dict(torch.load(args.pretrained))
 
     if args.mode == 'train':
         # example
@@ -207,5 +257,10 @@ if __name__ == '__main__':
         # python src/train.py auto --epoch 100 --batch_size 32 --mcts 50 --game 20 --lr 1e-3 --interval 50 --model_save model
         pipeline = TrainingPipeline(args.epoch, args.batch_size, args.lr, args.interval)
         pipeline.self_train(network, args.mcts, args.game, args.model_save)
+    elif args.mode == 'eval': 
+        # example
+        # python src/train.py eval --epoch 10 --batch_size 16 --mcts 25 --game 15 --pretrained model/20220917_195642.pt
+        pipeline = EvaluationPipeline(args.epoch, args.batch_size)
+        pipeline.self_evaluate(network, args.mcts, args.game)
     else: 
         raise ValueError('Invalid mode')
