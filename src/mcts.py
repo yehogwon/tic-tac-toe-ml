@@ -79,7 +79,7 @@ class MCTS:
         while not node.is_leaf(): 
             action, node = node.select(explore)
             state.take_action(action)
-        action_probs, leaf_value = self.network(torch.tensor(state.board, dtype=torch.float32, device=device).view(1, 1, 3, 3))
+        action_probs, leaf_value = self.network(torch.tensor(state.get_training_state(), dtype=torch.float32, device=device).view(1, 2, 3, 3))
         if state.is_terminal(): 
             winner = state.get_reward()
             if winner == state.turn: 

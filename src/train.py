@@ -107,7 +107,7 @@ class TrainingPipeline:
             loss_avg = float(0)
             p_bar = tqdm(buffer.loader(self.batch_size), total=len(buffer) // self.batch_size, desc=f'Training {i}/{self.n_epoch} : 0', file=sys.stdout)
             for batch in p_bar:
-                state_batch = torch.tensor(np.array([data[0] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
+                state_batch = torch.tensor(np.array([data[0] for data in batch]), dtype=torch.float32).to(device)
                 policy_batch = torch.tensor(np.array([data[1] for data in batch]), dtype=torch.float32).to(device)
                 value_batch = torch.tensor(np.array([data[2] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
 
@@ -145,7 +145,7 @@ class TrainingPipeline:
             loss_avg = float(0)
             p_bar = tqdm(buffer.loader(self.batch_size), total=len(buffer) // self.batch_size, desc=f'Training {i}/{self.n_epoch} : 0', file=sys.stdout)
             for batch in p_bar:
-                state_batch = torch.tensor(np.array([data[0] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
+                state_batch = torch.tensor(np.array([data[0] for data in batch]), dtype=torch.float32).to(device)
                 policy_batch = torch.tensor(np.array([data[1] for data in batch]), dtype=torch.float32).to(device)
                 value_batch = torch.tensor(np.array([data[2] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
 
@@ -189,7 +189,7 @@ class EvaluationPipeline:
                 continue
             p_bar = tqdm(buffer.loader(self.batch_size), total=len(buffer) // self.batch_size, desc=f'Training {i}/{self.n_epoch} : 0', file=sys.stdout)
             for batch in p_bar:
-                state_batch = torch.tensor(np.array([data[0] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
+                state_batch = torch.tensor(np.array([data[0] for data in batch]), dtype=torch.float32).to(device)
                 policy_batch = torch.tensor(np.array([data[1] for data in batch]), dtype=torch.float32).to(device)
                 value_batch = torch.tensor(np.array([data[2] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
 

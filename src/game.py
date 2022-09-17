@@ -42,6 +42,12 @@ class TicTacToeState(BaseState):
         else: 
             return 0
     
+    def get_training_state(self) -> np.ndarray:
+        x = np.zeros((2, 3, 3), dtype=np.int_)
+        x[0] = (self.board == 1).astype(np.int_)
+        x[1] = (self.board == -1).astype(np.int_)
+        return x.copy()
+    
     def __repr__(self) -> str:
         _board = self.board.tolist()
         for item in range(3): 
@@ -59,10 +65,7 @@ def self_play(agent: BaseAgent) -> List[Tuple[np.ndarray, np.ndarray, np.ndarray
     states, probs, current_players = [], [], []
     while not state.is_terminal():
         action, action_probs = agent.get_action(state)
-        x = np.zeros((2, 3, 3), dtype=np.int_)
-        x[0] = (state.board == 1).astype(np.int_)
-        x[1] = (state.board == -1).astype(np.int_)
-        states.append(x.copy())
+        states.append(state.get_training_state())
         probs.append(action_probs)
         current_players.append(state.get_current_player())
         state = state.take_action(action)
