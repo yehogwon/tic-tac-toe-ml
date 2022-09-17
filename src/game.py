@@ -76,7 +76,8 @@ class ManualAgent(BaseAgent):
         ...
 
     def get_action(self, state: TicTacToeState) -> Tuple[int, np.ndarray]:
-        action = int(input('Action: '))
+        x, y = map(int, input('Action (x, y): ').split())
+        action = y * 3 + x
         if action not in state.get_possible_actions(): 
             raise ValueError('Invalid action')
         probs = np.zeros(9, dtype=np.float32)
