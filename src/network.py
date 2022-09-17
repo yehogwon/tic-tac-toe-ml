@@ -37,7 +37,7 @@ class PolicyValueNet(nn.Module):
         super().__init__()
 
         self.backbone = nn.Sequential(
-            nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(2, 16, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(16), 
             nn.ReLU(),
             nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),

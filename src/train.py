@@ -193,9 +193,9 @@ class EvaluationPipeline:
                 policy_batch = torch.tensor(np.array([data[1] for data in batch]), dtype=torch.float32).to(device)
                 value_batch = torch.tensor(np.array([data[2] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
 
-                _probs, v = network(state_batch)
+                _probs, _v = network(state_batch)
                 probs = F.softmax(_probs, dim=1)
-                old_v = F.softmax(old_v, dim=1)
+                v = F.softmax(_v, dim=1)
 
                 correct += torch.sum(torch.argmax(probs, dim=1) == torch.argmax(policy_batch, dim=1)).item()
                 total += len(policy_batch)
