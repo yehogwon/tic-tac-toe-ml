@@ -39,8 +39,8 @@ class Node:
             if action not in self.children: 
                 self.children[action] = Node(self, prob)
 
-    def select(self): 
-        return max(self.children.items(), key=lambda node: node[1].get_uct())
+    def select(self, explore: bool): 
+        return max(self.children.items(), key=lambda node: node[1].get_uct(explore))
     
     def update(self, reward: int): 
         self.n += 1
@@ -51,11 +51,14 @@ class Node:
             self.parent.backpropagate(-reward)
         self.update(reward)
 
-    def get_uct(self): 
+    def get_uct(self, explore: bool): 
         if self.n == 0: 
             self.u = float('inf')
         else:
-            self.u = self.w / (self.n) + self.c * self.p_prob * math.sqrt(self.parent.n) / (1 + self.n)
+            if explore: 
+                self.u = self.w / (self.n) + self.c * self.p_prob * math.sqrt(self.parent.n) / (1 + self.n)
+            else: 
+                self.u = self.w / (self.n)
         return self.u
     
     def is_leaf(self): 
@@ -71,10 +74,10 @@ class MCTS:
         self.c_puct = c_puct
         self.n_iteration = n_iteration
     
-    def playout(self, state: TicTacToeState): 
+    def playout(self, state: TicTacToeState, explore: bool): 
         node = self.root
         while not node.is_leaf(): 
-            action, node = node.select()
+            action, node = node.select(explore)
             state.take_action(action)
         action_probs, leaf_value = self.network(torch.tensor(state.board, dtype=torch.float32).view(1, 1, 3, 3).to(device))
         if state.is_terminal(): 
@@ -96,10 +99,10 @@ class MCTS:
             node.expand(action_prob_list)
         node.backpropagate(-leaf_value)
     
-    def get_move_probs(self, state: TicTacToeState) -> Tuple[List[int], np.typing.NDArray]: 
+    def get_move_probs(self, state: TicTacToeState, explore: bool = True) -> Tuple[List[int], np.typing.NDArray]: 
         for _ in range(self.n_iteration): 
             _state = copy.deepcopy(state)
-            self.playout(_state)
+            self.playout(_state, explore=explore)
         act_visits = [(act, node.n) for act, node in self.root.children.items()]
         acts, visits = zip(*act_visits)
         visits = list(visits)
@@ -125,7 +128,7 @@ class MCTSAgent(BaseAgent):
         self.mcts.update_with_move(-1)
     
     def get_action(self, state: TicTacToeState) -> Tuple[int, np.ndarray]: 
-        acts, probs = self.mcts.get_move_probs(state)
+        acts, probs = self.mcts.get_move_probs(state, explore=False)
         action = np.random.choice(acts, p=probs)
         self.mcts.update_with_move(action)
         return action, probs
@@ -136,8 +139,9 @@ class MCTSAgent(BaseAgent):
 if __name__ == '__main__': 
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', type=str, help='name of the file containing the model weights')
+    parser.add_argument('--mcts', type=int, help='the number of iterations to search for each move')
     args = parser.parse_args()
 
     net = PolicyValueNet()
     net.load_state_dict(torch.load(f'model/{args.model}', map_location='cpu'))
-    game.play([MCTSAgent(net, 100), game.ManualAgent()])
+    game.play([MCTSAgent(net, args.mcts), game.ManualAgent()])
