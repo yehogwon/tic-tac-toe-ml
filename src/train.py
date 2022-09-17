@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
+import sys
 from tqdm.auto import tqdm
 from collections import deque
 from typing import List, Tuple
@@ -102,7 +103,7 @@ class TrainingPipeline:
         optimizer = optim.Adam(network.parameters(), lr=self.lr, weight_decay=1e-4)
         for i in range(1, self.n_epoch + 1): 
             loss_avg = float(0)
-            p_bar = tqdm(buffer.loader(self.batch_size), total=len(buffer) // self.batch_size, desc=f'Training {i}/{self.n_epoch} : 0')
+            p_bar = tqdm(buffer.loader(self.batch_size), total=len(buffer) // self.batch_size, desc=f'Training {i}/{self.n_epoch} : 0', file=sys.stdout)
             for batch in p_bar:
                 state_batch = torch.tensor(np.array([data[0] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
                 policy_batch = torch.tensor(np.array([data[1] for data in batch]), dtype=torch.float32).to(device)
@@ -119,7 +120,6 @@ class TrainingPipeline:
 
                 loss_avg = (loss_avg + loss.item()) / 2
                 p_bar.set_description(f'Training {i}/{self.n_epoch} : {loss_avg:.4f}')
-            print_log(f'Epoch Done {i}/{self.n_epoch} : {loss_avg:.4f}')
             if i % self.interval == 0: 
                 torch.save(network.state_dict(), model_path + f"/{time_stamp()}.pt")
                 print_log(f'Model Saved : {model_path}/{time_stamp()}.pt')
@@ -133,7 +133,7 @@ class TrainingPipeline:
             with torch.no_grad(): 
                 buffer.correct_data(agent, game, False)
             loss_avg = float(0)
-            p_bar = tqdm(buffer.loader(self.batch_size), total=len(buffer) // self.batch_size, desc=f'Training {i}/{self.n_epoch} : 0')
+            p_bar = tqdm(buffer.loader(self.batch_size), total=len(buffer) // self.batch_size, desc=f'Training {i}/{self.n_epoch} : 0', file=sys.stdout)
             for batch in p_bar:
                 state_batch = torch.tensor(np.array([data[0] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
                 policy_batch = torch.tensor(np.array([data[1] for data in batch]), dtype=torch.float32).to(device)
@@ -150,7 +150,6 @@ class TrainingPipeline:
 
                 loss_avg = (loss_avg + loss.item()) / 2
                 p_bar.set_description(f'Training {i}/{self.n_epoch} : {loss_avg:.4f}')
-            print_log(f'Epoch Done {i}/{self.n_epoch} : {loss_avg:.4f}')
             if i % self.interval == 0: 
                 torch.save(network.state_dict(), model_path + f'/{time_stamp()}.pt')
                 print_log(f'Model Saved : {model_path}/{time_stamp()}.pt')
