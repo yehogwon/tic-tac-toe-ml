@@ -69,6 +69,10 @@ class SelfPlayBuffer:
     
     def sample(self, size: int) -> List: 
         return random.sample(self._buffer, size)
+    
+    def loader(self, size: int) -> List: 
+        for i in range(len(self) // size): 
+            yield self.sample(size)
 
     def __len__(self) -> int:
         return len(self._buffer)
@@ -97,37 +101,9 @@ class TrainingPipeline:
     def train(self, network: PolicyValueNet, buffer: SelfPlayBuffer, model_path: str) -> None: 
         optimizer = optim.Adam(network.parameters(), lr=self.lr, weight_decay=1e-4)
         for i in range(1, self.n_epoch + 1): 
-            batch = buffer.sample(self.batch_size)
-
-            state_batch = torch.tensor(np.array([data[0] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
-            policy_batch = torch.tensor(np.array([data[1] for data in batch]), dtype=torch.float32).to(device)
-            value_batch = torch.tensor(np.array([data[2] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
-
-            _old_probs, old_v = network(state_batch)
-            old_probs = F.softmax(_old_probs, dim=1)
-            
-            loss = self.criteria([old_probs, old_v], [policy_batch, value_batch])
-            
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            print_log(f'{i}/{self.n_epoch} : {loss.item():.4f}')
-            if i % self.interval == 0: 
-                torch.save(network.state_dict(), model_path + f"/{time_stamp()}.pt")
-                print_log(f'Model Saved : {model_path}/{time_stamp()}.pt')
-        print_log(f'Training Finished')
-        
-    def self_train(self, network: PolicyValueNet, mcts: int, game: int, n_game: int, model_path: str) -> None: 
-        optimizer = optim.Adam(network.parameters(), lr=self.lr, weight_decay=1e-4)
-        for game_count in range(1, n_game + 1): 
-            agent = MCTSAgent(network, mcts)
-            buffer = SelfPlayBuffer()
-            for i in range(1, self.n_epoch + 1): 
-                with torch.no_grad(): 
-                    buffer.correct_data(agent, game, False)
-                    batch = buffer.sample(self.batch_size)
-
+            loss_avg = float(0)
+            p_bar = tqdm(buffer.loader(self.batch_size), total=len(buffer) // self.batch_size, desc=f'Training {i}/{self.n_epoch} : 0')
+            for batch in p_bar:
                 state_batch = torch.tensor(np.array([data[0] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
                 policy_batch = torch.tensor(np.array([data[1] for data in batch]), dtype=torch.float32).to(device)
                 value_batch = torch.tensor(np.array([data[2] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
@@ -141,11 +117,43 @@ class TrainingPipeline:
                 loss.backward()
                 optimizer.step()
 
-                print_log(f'{game_count}/{n_game} : {i}/{self.n_epoch} : {loss.item():.4f}')
-                if i % self.interval == 0: 
-                    torch.save(network.state_dict(), model_path + f'/{time_stamp()}.pt')
-                    print_log(f'Model Saved : {model_path}/{time_stamp()}.pt')
-            print_log(f'Training Finished : {game_count}/{n_game}')
+                loss_avg = (loss_avg + loss.item()) / 2
+                p_bar.set_description(f'Training {i}/{self.n_epoch} : {loss_avg:.4f}')
+            print_log(f'Epoch Done {i}/{self.n_epoch} : {loss_avg:.4f}')
+            if i % self.interval == 0: 
+                torch.save(network.state_dict(), model_path + f"/{time_stamp()}.pt")
+                print_log(f'Model Saved : {model_path}/{time_stamp()}.pt')
+        print_log(f'Training Finished')
+        
+    def self_train(self, network: PolicyValueNet, mcts: int, game: int, model_path: str) -> None: 
+        optimizer = optim.Adam(network.parameters(), lr=self.lr, weight_decay=1e-4)
+        agent = MCTSAgent(network, mcts)
+        buffer = SelfPlayBuffer()
+        for i in range(1, self.n_epoch + 1): 
+            with torch.no_grad(): 
+                buffer.correct_data(agent, game, False)
+            loss_avg = float(0)
+            p_bar = tqdm(buffer.loader(self.batch_size), total=len(buffer) // self.batch_size, desc=f'Training {i}/{self.n_epoch} : 0')
+            for batch in p_bar:
+                state_batch = torch.tensor(np.array([data[0] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
+                policy_batch = torch.tensor(np.array([data[1] for data in batch]), dtype=torch.float32).to(device)
+                value_batch = torch.tensor(np.array([data[2] for data in batch]), dtype=torch.float32).unsqueeze(dim=1).to(device)
+
+                _old_probs, old_v = network(state_batch)
+                old_probs = F.softmax(_old_probs, dim=1)
+                
+                loss = self.criteria([old_probs, old_v], [policy_batch, value_batch])
+                
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+                loss_avg = (loss_avg + loss.item()) / 2
+                p_bar.set_description(f'Training {i}/{self.n_epoch} : {loss_avg:.4f}')
+            print_log(f'Epoch Done {i}/{self.n_epoch} : {loss_avg:.4f}')
+            if i % self.interval == 0: 
+                torch.save(network.state_dict(), model_path + f'/{time_stamp()}.pt')
+                print_log(f'Model Saved : {model_path}/{time_stamp()}.pt')
         print_log('Training Finished')
 
 if __name__ == '__main__': 
@@ -156,7 +164,6 @@ if __name__ == '__main__':
 
     parser.add_argument('--capacity', type=int, default=10000)
     parser.add_argument('--epoch', type=int, default=10000)
-    parser.add_argument('--game_count', type=int, default=10000)
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--mcts', type=int, default=100)
@@ -170,7 +177,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     network = PolicyValueNet().to(device)
-    if args.model:
+    if args.pretrained:
         network.load_state_dict(torch.load(args.model))
 
     if args.mode == 'train':
@@ -193,8 +200,8 @@ if __name__ == '__main__':
             buffer.save(args.data_save + '/' + datetime.datetime.now().strftime('%Y%m%d_%H%M%S') + '.pkl')
     elif args.mode == 'auto': 
         # example
-        # python src/train.py auto --epoch 100 --batch_size 32 --mcts 50 --game 20 --game_count 10 --lr 1e-3 --interval 50 --model_save model
+        # python src/train.py auto --epoch 100 --batch_size 32 --mcts 50 --game 20 --lr 1e-3 --interval 50 --model_save model
         pipeline = TrainingPipeline(args.epoch, args.batch_size, args.lr, args.interval)
-        pipeline.self_train(network, args.mcts, args.game, args.game_count, args.model_save)
+        pipeline.self_train(network, args.mcts, args.game, args.model_save)
     else: 
         raise ValueError('Invalid mode')
