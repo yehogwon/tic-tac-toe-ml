@@ -232,7 +232,7 @@ if __name__ == '__main__':
 
     network = PolicyValueNet().to(device)
     if args.pretrained:
-        network.load_state_dict(torch.load(args.pretrained))
+        network.load_state_dict(torch.load(args.pretrained, map_location=device))
 
     if args.mode == 'train':
         # example
